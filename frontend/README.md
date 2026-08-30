@@ -1,16 +1,68 @@
-# React + Vite
+# FOX BUS — FoxTrip
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Sistema de venta de pasajes en línea.
 
-Currently, two official plugins are available:
+## Descripción
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Plataforma web para la empresa de buses **FOX BUS**. La página se llama **FoxTrip** y permite a los usuarios buscar viajes, seleccionar asientos y comprar pasajes en línea de forma 100% digital.
 
-## React Compiler
+## Tecnologías
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React 19 + Vite 8
+- Tailwind CSS
+- React Router (react-router-dom)
+- Zustand (manejo de estado)
+- Recharts (gráficos del panel admin)
+- Axios (consumo de API)
+- Framer Motion (animaciones)
 
-## Expanding the ESLint configuration
+## Requisitos
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Node.js 18 o superior
+- npm
+
+## Instalación
+
+```bash
+cd frontend
+npm install
+```
+
+## Ejecutar en desarrollo
+
+```bash
+npm run dev
+```
+
+El servidor se levanta en http://localhost:5173/
+
+## Compilar para producción
+
+```bash
+npm run build
+```
+
+## Estructura
+
+```
+frontend/
+├── src/
+│   ├── components/    # Componentes reutilizables
+│   │   ├── admin/     # Panel de administración
+│   │   ├── common/    # Componentes genéricos (botones, inputs, modales)
+│   │   ├── landing/   # Secciones de la página de inicio
+│   │   ├── layout/    # Header, Footer, AdminLayout
+│   │   └── chatbot/   # Widget del chatbot
+│   ├── pages/         # Vistas/páginas de la aplicación
+│   ├── services/      # Conexión con el backend (axios)
+│   ├── store/         # Estado global (Zustand)
+│   ├── hooks/         # Hooks personalizados
+│   └── utils/         # Funciones auxiliares y validaciones
+├── package.json
+├── tailwind.config.js
+└── ...
+```
+
+## Notas
+
+El backend se desarrollará posteriormente. Los servicios usan datos de ejemplo (mock) mientras no exista una API conectada.
