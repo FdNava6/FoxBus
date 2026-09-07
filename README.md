@@ -75,6 +75,14 @@ npm run dev
 
 El frontend se abre normalmente en `http://localhost:5173`.
 
+Antes de enviar cambios:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
 ## Documentación del Avance 1
 
 - [Definición y viabilidad](docs/AVANCE_1.md)

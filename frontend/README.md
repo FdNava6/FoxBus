@@ -44,6 +44,14 @@ El servidor se levanta en http://localhost:5173/
 npm run build
 ```
 
+## Validar cambios
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
 ## Estructura
 
 ```

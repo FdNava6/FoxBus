@@ -9,7 +9,7 @@ import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import SeachResults from './pages/SeachResults';
+import SearchResults from './pages/SearchResults';
 import SeatSelection from './pages/SeatSelection';
 import Checkout from './pages/Checkout';
 import MyTrips from './pages/MyTrips';
@@ -25,7 +25,7 @@ function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/resultados" element={<SeachResults />} />
+        <Route path="/resultados" element={<SearchResults />} />
         <Route path="/buscar" element={<Navigate replace to="/resultados" />} />
         <Route path="/asientos" element={<SeatSelection />} />
         <Route path="/checkout" element={<Checkout />} />

@@ -1,5 +1,5 @@
 // ============================================
-// SeachResults.jsx
+// SearchResults.jsx
 // Página de resultados de búsqueda de viajes.
 // Muestra los viajes disponibles según el origen,
 // destino y fecha, y permite seleccionar uno.
@@ -64,7 +64,7 @@ const mockTrips = (origin, destination, date) => [
   },
 ];
 
-export default function SeachResults() {
+export default function SearchResults() {
   const location = useLocation();
   const navigate = useNavigate();
   const selectTrip = useTripStore((state) => state.selectTrip);
