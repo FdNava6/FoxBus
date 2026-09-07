@@ -89,6 +89,13 @@ npm run build
 - [Guion sugerido para la exposición](docs/GUIA_PRESENTACION.md)
 - [Flujo de contribución](CONTRIBUTING.md)
 
+### Entregables
+
+- [Documento final en PDF](entregables/avance-1/FOXBus_Avance1_Grupo6.pdf)
+- [Presentación de seis diapositivas](entregables/avance-1/FOXBus_Presentacion_Avance1_Grupo6.pptx)
+
+La presentación incluye notas del expositor con una distribución sugerida entre los cinco integrantes y una duración aproximada de cuatro minutos y veinte segundos. La evidencia pública incluida sustenta la relevancia del sector y los derechos de los pasajeros; la validación específica con usuarios de la ruta Lima-Trujillo continúa como siguiente actividad del grupo.
+
 ## Equipo — Grupo 6
 
 - Lucas Alonso Hernandez Carpio
