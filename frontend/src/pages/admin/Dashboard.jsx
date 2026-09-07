@@ -1,4 +1,3 @@
-    import { useState } from 'react';
     import { 
     DollarSign, 
     Ticket, 
@@ -7,8 +6,9 @@
     Download,
     Bell
     } from 'lucide-react';
-    import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+    import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
     import AdminLayout from '../../components/layout/AdminLayout';
+    import DemoBanner from '../../components/common/DemoBanner';
 
     const salesData = [
     { date: '22 Ago', value: 10000 },
@@ -59,15 +59,17 @@
     export default function Dashboard() {
     return (
         <AdminLayout>
+        <DemoBanner className="mb-6" />
+
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
             <div>
             <h1 className="text-2xl font-display font-bold text-gray-800">
                 Resumen general de la operación
             </h1>
-            <p className="text-gray-500">Hoy, 28 Ago 2026</p>
+            <p className="text-gray-500">Escenario de referencia · 28 Ago 2026</p>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-fox-pink/10 text-fox-pink rounded-lg hover:bg-fox-pink/20 transition">
+            <button disabled title="Disponible con el backend" className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-gray-400">
             <Download className="w-5 h-5" />
             Descargar reporte
             </button>
@@ -187,8 +189,8 @@
                 <h3 className="font-display font-semibold text-gray-800">
                 Reservas recientes
                 </h3>
-                <button className="text-fox-pink text-sm font-medium hover:underline">
-                Ver todas las reservas
+                <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
+                Vista demostrativa
                 </button>
             </div>
             <div className="overflow-x-auto">
@@ -224,8 +226,8 @@
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">{reservation.payment}</td>
                         <td className="px-6 py-4">
-                        <button className="text-fox-pink text-sm font-medium hover:underline">
-                            Ver pasaje
+                        <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
+                            Demo
                         </button>
                         </td>
                     </tr>
@@ -236,10 +238,10 @@
             <div className="p-4 border-t border-gray-100 flex justify-between items-center">
                 <p className="text-sm text-gray-500">Mostrando 1 a 5 de 10 reservas</p>
                 <div className="flex gap-2">
-                <button className="px-3 py-1 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">&lt;</button>
+                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">&lt;</button>
                 <button className="px-3 py-1 bg-fox-pink text-white rounded-lg text-sm">1</button>
-                <button className="px-3 py-1 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">2</button>
-                <button className="px-3 py-1 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">&gt;</button>
+                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">2</button>
+                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">&gt;</button>
                 </div>
             </div>
             </div>
@@ -316,11 +318,11 @@
         <div className={`p-4 rounded-xl border ${styles[alert.type]}`}>
         <div className="flex items-start justify-between mb-2">
             <h4 className="font-semibold text-gray-800">{alert.title}</h4>
-            <button className="text-gray-400 hover:text-gray-600">×</button>
+            <button disabled aria-label="Cerrar alerta" className="text-gray-300">×</button>
         </div>
         <p className="text-sm text-gray-600 mb-3">{alert.message}</p>
-        <button className="text-sm font-medium text-fox-pink hover:underline">
-            Ver detalles
+        <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
+            Detalle próximamente
         </button>
         </div>
     );

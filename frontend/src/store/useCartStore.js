@@ -7,10 +7,13 @@
     totalPrice: 0,
     
     setTrip: (trip) => set({ trip }),
-    addSeats: (seats) => set((state) => ({ 
-        seats: [...state.seats, ...seats],
-        totalPrice: state.totalPrice + (seats.length * state.trip?.price)
-    })),
+    addSeats: (seats) => set((state) => {
+        const uniqueSeats = [...new Set(seats)];
+        return {
+            seats: uniqueSeats,
+            totalPrice: uniqueSeats.length * (state.trip?.price || 0)
+        };
+    }),
     addPassenger: (passenger) => set((state) => ({
         passengers: [...state.passengers, passenger]
     })),

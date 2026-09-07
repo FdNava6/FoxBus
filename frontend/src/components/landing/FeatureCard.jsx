@@ -1,7 +1,7 @@
 // ============================================
 // FeatureCard.jsx
 // Tarjeta para mostrar una característica del
-// servicio (compra segura, pagos, atención 24/7...).
+// servicio (reserva, pagos previstos, atención guiada...).
 // ============================================
 export default function FeatureCard({ icon, title, description }) {
   return (

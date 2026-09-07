@@ -47,8 +47,8 @@ export default function Login() {
       const data = await userService.login(form.email, form.password);
       login(data.user || { email: form.email }, data.token || 'demo-token');
       navigate(ROUTES.HOME);
-    } catch (error) {
-      setServerError('No se pudo iniciar sesión. Verifica tus datos.');
+    } catch {
+      setServerError('El inicio de sesión requiere el backend, que todavía no está conectado en este MVP.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ export default function Login() {
           Bienvenido de nuevo
         </h1>
         <p className="text-center text-gray-500 text-sm mb-8">
-          Inicia sesión en FoxTrip
+          Inicia sesión en FOX Bus
         </p>
 
         {serverError && (

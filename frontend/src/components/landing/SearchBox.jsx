@@ -1,24 +1,25 @@
-    import { useState } from 'react';
-    import { useNavigate } from 'react-router-dom';
-    import { MapPin, Calendar, Users, ArrowRightLeft, Search } from 'lucide-react';
-    import { format } from 'date-fns';
-    import { es } from 'date-fns/locale';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MapPin, Calendar, Users, Search } from 'lucide-react';
+import { format } from 'date-fns';
+import { ROUTES } from '../../utils/constants';
 
-    export default function SearchBox() {
-    const navigate = useNavigate();
-    const [searchData, setSearchData] = useState({
-        origin: 'Lima',
-        destination: 'Trujillo',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        passengers: 1
-    });
+export default function SearchBox() {
+  const navigate = useNavigate();
+  const [searchData, setSearchData] = useState({
+    origin: 'Lima',
+    destination: 'Trujillo',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    passengers: 1,
+  });
 
-    const handleSearch = () => {
-        navigate('/resultados', { state: searchData });
-    };
+  const handleSearch = (event) => {
+    event.preventDefault();
+    navigate(ROUTES.SEARCH, { state: searchData });
+  };
 
-    return (
-        <div className="bg-white rounded-2xl shadow-fox-lg p-6 md:p-8">
+  return (
+      <form onSubmit={handleSearch} className="bg-white rounded-2xl shadow-fox-lg p-5 md:p-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {/* Origen */}
             <div className="md:col-span-1">
@@ -30,7 +31,7 @@
                 <select
                 value={searchData.origin}
                 onChange={(e) => setSearchData({ ...searchData, origin: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
                 >
                 <option>Lima</option>
                 <option>Arequipa</option>
@@ -50,7 +51,7 @@
                 <select
                 value={searchData.destination}
                 onChange={(e) => setSearchData({ ...searchData, destination: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
                 >
                 <option>Trujillo</option>
                 <option>Chiclayo</option>
@@ -72,7 +73,7 @@
                 value={searchData.date}
                 min={format(new Date(), 'yyyy-MM-dd')}
                 onChange={(e) => setSearchData({ ...searchData, date: e.target.value })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
                 />
             </div>
             </div>
@@ -87,7 +88,7 @@
                 <select
                 value={searchData.passengers}
                 onChange={(e) => setSearchData({ ...searchData, passengers: parseInt(e.target.value) })}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none transition-all"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
                 >
                 {[1,2,3,4,5,6].map(num => (
                     <option key={num} value={num}>{num} {num === 1 ? 'Adulto' : 'Adultos'}</option>
@@ -99,7 +100,7 @@
             {/* Botón */}
             <div className="md:col-span-1 flex items-end">
             <button
-                onClick={handleSearch}
+                type="submit"
                 className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 px-6 rounded-xl font-semibold shadow-fox transition-all duration-300 flex items-center justify-center gap-2"
             >
                 <Search className="w-5 h-5" />
@@ -107,6 +108,6 @@
             </button>
             </div>
         </div>
-        </div>
-    );
-    }
+      </form>
+  );
+}

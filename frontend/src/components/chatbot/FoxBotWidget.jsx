@@ -104,6 +104,7 @@ export default function FoxBotWidget() {
                 <div>
                   <h3 className="font-display font-bold">FoxBot</h3>
                   <p className="text-sm text-white/80">Asistente Virtual</p>
+                  <p className="text-xs text-white/70">Demo con respuestas predefinidas</p>
                 </div>
               </div>
             </div>
@@ -172,12 +173,13 @@ export default function FoxBotWidget() {
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                   placeholder="Escribe tu mensaje..."
                   className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none text-sm"
                 />
                 <button
                   onClick={handleSend}
+                  aria-label="Enviar mensaje"
                   className="bg-fox-pink text-white p-2 rounded-full hover:bg-fox-pink-dark transition"
                 >
                   <Send className="w-5 h-5" />

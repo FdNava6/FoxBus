@@ -16,7 +16,14 @@ export const formatCurrency = (value) => {
 // Formatea una fecha ISO a formato legible (ej: 28 Ago 2026)
 export const formatDate = (dateString) => {
   if (!dateString) return '';
-  const date = new Date(dateString);
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  const date = dateOnlyMatch
+    ? new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3])
+      )
+    : new Date(dateString);
   return date.toLocaleDateString('es-PE', {
     day: 'numeric',
     month: 'short',

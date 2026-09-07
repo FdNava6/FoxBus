@@ -1,7 +1,7 @@
 // ============================================
 // Header.jsx
 // Barra de navegación superior. Muestra el logo
-// FoxTrip, enlaces a las secciones y el menú de
+// FOX Bus, enlaces a las secciones y el menú de
 // usuario (iniciar sesión / mis viajes / logout).
 // ============================================
 import { useState } from 'react';
@@ -29,7 +29,7 @@ export default function Header() {
             <Bus className="w-6 h-6" />
           </div>
           <span className="font-display font-bold text-2xl text-gray-800">
-            Fox<span className="text-fox-pink">Trip</span>
+            FOX <span className="text-fox-pink">Bus</span>
           </span>
         </Link>
 
@@ -73,6 +73,7 @@ export default function Header() {
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="md:hidden text-gray-700"
+          aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
         >
           {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </button>
@@ -92,7 +93,10 @@ export default function Header() {
           </Link>
           {isAuthenticated ? (
             <button
-              onClick={handleLogout}
+              onClick={() => {
+                handleLogout();
+                setMenuOpen(false);
+              }}
               className="text-left text-gray-500 font-medium"
             >
               Cerrar sesión

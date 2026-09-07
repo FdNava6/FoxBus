@@ -1,9 +1,9 @@
 // ============================================
 // Footer.jsx
 // Pie de página con información de contacto,
-// enlaces y redes sociales de FoxTrip.
+// enlaces e información del prototipo FOX Bus.
 // ============================================
-import { Bus, Phone, Mail, MapPin, Globe, Share2, ThumbsUp } from 'lucide-react';
+import { Bus, Mail, MapPin, Route } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -17,11 +17,11 @@ export default function Footer() {
                 <Bus className="w-5 h-5" />
               </div>
               <span className="font-display font-bold text-xl">
-                Fox<span className="text-fox-pink">Trip</span>
+                FOX <span className="text-fox-pink">Bus</span>
               </span>
             </div>
             <p className="text-gray-400 text-sm">
-              Viaja cómodo y seguro por todo el Perú con FOX Bus. Compra tus pasajes en línea en minutos.
+              Prototipo académico para centralizar la reserva, el abordaje y la atención posventa.
             </p>
           </div>
 
@@ -30,47 +30,39 @@ export default function Footer() {
             <h4 className="font-display font-semibold mb-4">Contacto</h4>
             <ul className="space-y-3 text-sm text-gray-400">
               <li className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-fox-pink" /> (01) 500-1234
+                <Route className="w-4 h-4 text-fox-pink" /> Piloto Lima–Trujillo
               </li>
               <li className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-fox-pink" /> contacto@foxtrip.pe
+                <Mail className="w-4 h-4 text-fox-pink" /> Canal de contacto por definir
               </li>
               <li className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-fox-pink" /> Av. Javier Prado 1250, Lima
+                <MapPin className="w-4 h-4 text-fox-pink" /> Lima, Perú
               </li>
             </ul>
           </div>
 
           {/* Enlaces */}
           <div>
-            <h4 className="font-display font-semibold mb-4">Enlaces</h4>
+            <h4 className="font-display font-semibold mb-4">Alcance</h4>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li><a href="#" className="hover:text-fox-pink transition">Términos y condiciones</a></li>
-              <li><a href="#" className="hover:text-fox-pink transition">Política de privacidad</a></li>
-              <li><a href="#" className="hover:text-fox-pink transition">Preguntas frecuentes</a></li>
-              <li><a href="#" className="hover:text-fox-pink transition">Trabaja con nosotros</a></li>
+              <li>Reserva demostrativa</li>
+              <li>Boleto QR propuesto</li>
+              <li>Posventa guiada</li>
+              <li>Dashboard operativo</li>
             </ul>
           </div>
 
           {/* Redes */}
           <div>
-            <h4 className="font-display font-semibold mb-4">Síguenos</h4>
-            <div className="flex gap-3">
-              <a href="#" className="p-2 bg-white/10 rounded-lg hover:bg-fox-pink transition">
-                <Globe className="w-5 h-5" />
-              </a>
-              <a href="#" className="p-2 bg-white/10 rounded-lg hover:bg-fox-pink transition">
-                <Share2 className="w-5 h-5" />
-              </a>
-              <a href="#" className="p-2 bg-white/10 rounded-lg hover:bg-fox-pink transition">
-                <ThumbsUp className="w-5 h-5" />
-              </a>
-            </div>
+            <h4 className="font-display font-semibold mb-4">Estado</h4>
+            <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-gray-300">
+              MVP de demostración. No procesa pagos ni datos reales.
+            </p>
           </div>
         </div>
 
         <div className="border-t border-white/10 mt-8 pt-6 text-center text-sm text-gray-500">
-          © 2026 FoxTrip. Todos los derechos reservados.
+          © 2026 FOX Bus · Proyecto académico de innovación.
         </div>
       </div>
     </footer>

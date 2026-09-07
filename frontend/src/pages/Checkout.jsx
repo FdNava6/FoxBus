@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, CheckCircle } from 'lucide-react';
 import Header from '../components/layout/Header';
 import Footer from '../components/layout/Footer';
+import DemoBanner from '../components/common/DemoBanner';
 import { useCartStore } from '../store/useCartStore';
 import { reservationService } from '../services/reservationService';
 import { PAYMENT_METHODS } from '../utils/constants';
@@ -16,7 +17,7 @@ import { formatCurrency, generateBookingCode } from '../utils/helpers';
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { trip, seats, passengers, totalPrice, clearCart } = useCartStore();
+  const { trip, seats, totalPrice, clearCart } = useCartStore();
 
   const [form, setForm] = useState({
     name: '',
@@ -27,6 +28,7 @@ export default function Checkout() {
   });
   const [processing, setProcessing] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmationMode, setConfirmationMode] = useState('demo');
   const [bookingCode] = useState(generateBookingCode());
 
   const handleChange = (e) => {
@@ -45,9 +47,11 @@ export default function Checkout() {
         total: totalPrice,
         code: bookingCode,
       });
+      setConfirmationMode('connected');
       setConfirmed(true);
-    } catch (error) {
-      // Sin backend: igual confirmamos el pedido (demo)
+    } catch {
+      // Sin backend: genera únicamente una reserva local de demostración.
+      setConfirmationMode('demo');
       setConfirmed(true);
     } finally {
       setProcessing(false);
@@ -62,6 +66,7 @@ export default function Checkout() {
       <Header />
       <main className="flex-1 bg-gray-50">
         <div className="container-fox py-10">
+          <DemoBanner className="mb-6" />
           <button
             onClick={() => navigate(ROUTES.SEAT_SELECTION)}
             className="flex items-center gap-2 text-gray-500 hover:text-fox-pink mb-6 transition"
@@ -76,11 +81,16 @@ export default function Checkout() {
                 <CheckCircle className="w-12 h-12" />
               </div>
               <h2 className="font-display font-bold text-2xl text-gray-800 mb-2">
-                ¡Pago exitoso!
+                {confirmationMode === 'connected' ? 'Solicitud registrada' : 'Reserva demo generada'}
               </h2>
               <p className="text-gray-500 mb-4">
-                Tu reserva ha sido confirmada. Te enviamos los detalles a tu correo.
+                {confirmationMode === 'connected'
+                  ? 'La reserva fue recibida por el servicio. La integración de pago debe validarse por separado.'
+                  : 'No se realizó ningún cobro ni envío de correo. Este código solo permite continuar el recorrido del prototipo.'}
               </p>
+              <span className="mb-4 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                {confirmationMode === 'connected' ? 'API conectada' : 'Modo demostración'}
+              </span>
               <div className="bg-gray-50 rounded-xl p-4 mb-6">
                 <p className="text-sm text-gray-500 mb-1">Código de reserva</p>
                 <p className="font-mono font-bold text-fox-pink text-2xl">{bookingCode}</p>
@@ -189,7 +199,7 @@ export default function Checkout() {
                       disabled={processing}
                       className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all disabled:opacity-50"
                     >
-                      {processing ? 'Procesando pago...' : `Pagar ${formatCurrency(total)}`}
+                      {processing ? 'Generando reserva...' : `Generar reserva demo · ${formatCurrency(total)}`}
                     </button>
                   </form>
                 </div>

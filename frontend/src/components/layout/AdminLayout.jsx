@@ -39,7 +39,10 @@ export default function AdminLayout({ children }) {
             >
               {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <h2 className="font-display font-semibold text-gray-800">Admin</h2>
+            <div>
+              <h2 className="font-display font-semibold text-gray-800">Administración</h2>
+              <p className="text-xs text-gray-500">Vista con datos simulados</p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -47,11 +50,12 @@ export default function AdminLayout({ children }) {
               <Search className="w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar..."
+                placeholder="Búsqueda disponible próximamente"
+                disabled
                 className="bg-transparent outline-none text-sm"
               />
             </div>
-            <button className="relative text-gray-600">
+            <button className="relative text-gray-400" disabled aria-label="Notificaciones de demostración">
               <Bell className="w-5 h-5" />
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-fox-pink rounded-full" />
             </button>

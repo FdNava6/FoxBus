@@ -1,6 +1,6 @@
 // ============================================
 // constants.js
-// Constantes globales de la aplicación FoxTrip.
+// Constantes globales de la aplicación FOX Bus.
 // Aquí se centralizan valores reutilizables como
 // rutas de navegación, ciudades, servicios del bus,
 // métodos de pago y estados.
@@ -10,7 +10,7 @@ export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   REGISTER: '/register',
-  SEARCH: '/buscar',
+  SEARCH: '/resultados',
   SEAT_SELECTION: '/asientos',
   CHECKOUT: '/checkout',
   MY_TRIPS: '/mis-viajes',

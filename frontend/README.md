@@ -1,10 +1,12 @@
-# FOX BUS — FoxTrip
+# FOX Bus — Frontend
 
 Sistema de venta de pasajes en línea.
 
 ## Descripción
 
-Plataforma web para la empresa de buses **FOX BUS**. La página se llama **FoxTrip** y permite a los usuarios buscar viajes, seleccionar asientos y comprar pasajes en línea de forma 100% digital.
+Frontend del prototipo académico **FOX Bus**. Permite buscar viajes, seleccionar asientos, generar una reserva demostrativa, consultar viajes y explorar un dashboard con datos simulados.
+
+> Este MVP no procesa pagos, correos, códigos QR ni datos operativos reales. Consulta la [documentación general](../README.md) para conocer el alcance.
 
 ## Tecnologías
 
@@ -42,6 +44,14 @@ El servidor se levanta en http://localhost:5173/
 npm run build
 ```
 
+## Validar cambios
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
 ## Estructura
 
 ```
@@ -65,4 +75,4 @@ frontend/
 
 ## Notas
 
-El backend se desarrollará posteriormente. Los servicios usan datos de ejemplo (mock) mientras no exista una API conectada.
+El backend se desarrollará posteriormente. Los servicios usan datos de ejemplo mientras no exista una API conectada. La interfaz identifica expresamente el modo demostración para evitar confundir el prototipo con una operación real.
