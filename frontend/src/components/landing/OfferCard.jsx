@@ -3,8 +3,12 @@
 // Tarjeta para mostrar una oferta de viaje.
 // ============================================
 import { ArrowRight, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ROUTES } from '../../utils/constants';
 
 export default function OfferCard({ offer }) {
+  const destination = offer?.title?.split(' - ')[1] || 'Trujillo';
+
   return (
     <div className="card overflow-hidden hover:shadow-fox-lg transition-shadow duration-300">
       <div className="relative h-40 bg-gradient-to-br from-fox-pink to-fox-pink-dark flex items-center justify-center">
@@ -29,9 +33,18 @@ export default function OfferCard({ offer }) {
               S/ {offer?.price?.toLocaleString('es-PE')}
             </p>
           </div>
-          <button className="flex items-center gap-1 text-fox-pink font-medium hover:gap-2 transition-all">
+          <Link
+            to={ROUTES.SEARCH}
+            state={{
+              origin: 'Lima',
+              destination,
+              date: new Date().toISOString().slice(0, 10),
+              passengers: 1,
+            }}
+            className="flex items-center gap-1 text-fox-pink font-medium hover:gap-2 transition-all"
+          >
             Reservar <ArrowRight className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       </div>
     </div>

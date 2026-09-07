@@ -52,12 +52,17 @@ export default function Register() {
     setLoading(true);
     setServerError('');
     try {
-      const { confirmPassword, ...userData } = form;
+      const userData = {
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+      };
       const data = await userService.register(userData);
       register(data.user || { name: form.name, email: form.email }, data.token || 'demo-token');
       navigate(ROUTES.HOME);
-    } catch (error) {
-      setServerError('No se pudo completar el registro. Inténtalo de nuevo.');
+    } catch {
+      setServerError('El registro requiere el backend, que todavía no está conectado en este MVP.');
     } finally {
       setLoading(false);
     }
@@ -75,7 +80,7 @@ export default function Register() {
           Crea tu cuenta
         </h1>
         <p className="text-center text-gray-500 text-sm mb-8">
-          Únete a FoxTrip y empieza a viajar
+          Únete a FOX Bus y empieza a viajar
         </p>
 
         {serverError && (

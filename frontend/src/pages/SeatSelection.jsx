@@ -33,7 +33,7 @@ const occupiedSeats = ['3A', '3B', '5C', '7D', '8A', '9C'];
 
 export default function SeatSelection() {
   const navigate = useNavigate();
-  const { trip, seats, addSeats, clearCart } = useCartStore();
+  const { trip, addSeats } = useCartStore();
   const [selectedSeats, setSelectedSeats] = useState([]);
 
   const allSeats = generateSeats();

@@ -12,7 +12,10 @@ const localReplies = {
   'equipaje': 'Cada pasajero puede llevar hasta 20kg de equipaje en bodega y un equipaje de mano. El equipaje extra tiene un costo adicional.',
   'horario': 'Tenemos salidas cada 2 horas desde las 6:00 a.m. hasta las 11:00 p.m. Consulta los horarios exactos según tu ruta.',
   'oferta': 'Actualmente tenemos 20% de descuento en rutas al norte del país. Revisa la sección de ofertas para más detalles.',
-  'default': 'Gracias por tu consulta. Un asesor de FoxTrip te contactará pronto. También puedes llamarnos al (01) 500-1234.',
+  'reprogram': 'En el MVP puedes registrar una solicitud de reprogramación desde Mis viajes. La confirmación automática se implementará con el backend.',
+  'devolu': 'La devolución se presenta como un flujo guiado de demostración. No se realizan movimientos de dinero reales.',
+  'retras': 'Puedes registrar una incidencia por retraso desde Mis viajes. Las compensaciones automáticas están fuera del alcance actual.',
+  'default': 'Esta versión de FoxBot usa respuestas predefinidas. Prueba preguntar por pasajes, equipaje, horarios, ofertas, reprogramaciones, devoluciones o retrasos.',
 };
 
 const getLocalReply = (message) => {
@@ -29,7 +32,7 @@ export const chatbotService = {
     try {
       const response = await api.post('/chatbot/message', { message });
       return response.data;
-    } catch (error) {
+    } catch {
       // Si el backend no responde, usa respuesta local
       return { message: getLocalReply(message) };
     }

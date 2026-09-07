@@ -4,7 +4,7 @@
 // Muestra los viajes disponibles según el origen,
 // destino y fecha, y permite seleccionar uno.
 // ============================================
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Clock, Users, ArrowRight, Bus } from 'lucide-react';
 import Header from '../components/layout/Header';
@@ -17,12 +17,12 @@ import { ROUTES } from '../utils/constants';
 import { formatTime, formatCurrency } from '../utils/helpers';
 
 // Datos de ejemplo para el demo (si no hay backend)
-const mockTrips = (origin, destination) => [
+const mockTrips = (origin, destination, date) => [
   {
     id: 1,
     origin,
     destination,
-    date: '2026-08-30',
+    date,
     departureTime: '06:00',
     arrivalTime: '11:30',
     price: 85,
@@ -33,7 +33,7 @@ const mockTrips = (origin, destination) => [
     id: 2,
     origin,
     destination,
-    date: '2026-08-30',
+    date,
     departureTime: '10:00',
     arrivalTime: '15:30',
     price: 85,
@@ -44,7 +44,7 @@ const mockTrips = (origin, destination) => [
     id: 3,
     origin,
     destination,
-    date: '2026-08-30',
+    date,
     departureTime: '14:00',
     arrivalTime: '19:30',
     price: 70,
@@ -55,7 +55,7 @@ const mockTrips = (origin, destination) => [
     id: 4,
     origin,
     destination,
-    date: '2026-08-30',
+    date,
     departureTime: '22:00',
     arrivalTime: '03:30',
     price: 95,
@@ -67,10 +67,18 @@ const mockTrips = (origin, destination) => [
 export default function SeachResults() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedTrip, selectTrip } = useTripStore();
+  const selectTrip = useTripStore((state) => state.selectTrip);
   const setTrip = useCartStore((s) => s.setTrip);
 
-  const searchData = location.state || { origin: 'Lima', destination: 'Trujillo' };
+  const searchData = useMemo(
+    () => location.state || {
+      origin: 'Lima',
+      destination: 'Trujillo',
+      date: new Date().toISOString().slice(0, 10),
+      passengers: 1,
+    },
+    [location.state]
+  );
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,10 +92,10 @@ export default function SeachResults() {
           searchData.date,
           searchData.passengers
         );
-        setTrips(data.length ? data : mockTrips(searchData.origin, searchData.destination));
-      } catch (error) {
+        setTrips(data.length ? data : mockTrips(searchData.origin, searchData.destination, searchData.date));
+      } catch {
         // Sin backend: usa datos de ejemplo
-        setTrips(mockTrips(searchData.origin, searchData.destination));
+        setTrips(mockTrips(searchData.origin, searchData.destination, searchData.date));
       } finally {
         setLoading(false);
       }

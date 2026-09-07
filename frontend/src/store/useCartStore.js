@@ -8,8 +8,8 @@
     
     setTrip: (trip) => set({ trip }),
     addSeats: (seats) => set((state) => ({ 
-        seats: [...state.seats, ...seats],
-        totalPrice: state.totalPrice + (seats.length * state.trip?.price)
+        seats: [...new Set(seats)],
+        totalPrice: seats.length * (state.trip?.price || 0)
     })),
     addPassenger: (passenger) => set((state) => ({
         passengers: [...state.passengers, passenger]

@@ -18,8 +18,8 @@ export default function FoxBotSection({ onOpenBot }) {
               ¿Tienes dudas? Habla con FoxBot
             </h2>
             <p className="text-gray-300">
-              Nuestro asistente virtual está disponible 24/7 para ayudarte a
-              comprar pasajes, resolver consultas y más.
+              Esta versión demostrativa responde preguntas frecuentes sobre
+              compra, equipaje, horarios y solicitudes de posventa.
             </p>
           </div>
         </div>

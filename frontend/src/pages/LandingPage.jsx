@@ -1,11 +1,10 @@
 // ============================================
 // LandingPage.jsx
-// Página de inicio de FoxTrip. Reúne el Hero con
+// Página de inicio de FOX Bus. Reúne el Hero con
 // el buscador, las características, las ofertas y
 // la sección promocional de FoxBot.
 // ============================================
-import { useRef } from 'react';
-import { ShieldCheck, CreditCard, Headphones } from 'lucide-react';
+import { ClipboardCheck, CreditCard, Headphones } from 'lucide-react';
 import Header from '../components/layout/Header';
 import Footer from '../components/layout/Footer';
 import Hero from '../components/landing/Hero';
@@ -16,19 +15,19 @@ import FoxBotWidget from '../components/chatbot/FoxBotWidget';
 
 const features = [
   {
-    icon: <ShieldCheck className="w-6 h-6" />,
-    title: 'Compra 100% segura',
-    description: 'Tus datos y pagos protegidos con la mejor tecnología de seguridad en línea.',
+    icon: <ClipboardCheck className="w-6 h-6" />,
+    title: 'Reserva centralizada',
+    description: 'Busca, elige asiento y conserva el seguimiento del pasaje en un mismo flujo.',
   },
   {
     icon: <CreditCard className="w-6 h-6" />,
-    title: 'Múltiples formas de pago',
-    description: 'Paga con tarjeta, Yape, Plin o cualquier medio que prefieras.',
+    title: 'Pagos previstos',
+    description: 'El prototipo muestra tarjeta, Yape y Plin como integraciones futuras.',
   },
   {
     icon: <Headphones className="w-6 h-6" />,
-    title: 'Atención 24/7',
-    description: 'Nuestro equipo y FoxBot están disponibles para ayudarte en todo momento.',
+    title: 'Atención guiada',
+    description: 'FoxBot responde preguntas frecuentes y orienta solicitudes de posventa.',
   },
 ];
 
@@ -39,8 +38,6 @@ const offers = [
 ];
 
 export default function LandingPage() {
-  const botSectionRef = useRef(null);
-
   const openBot = () => {
     // Dispara un evento global para abrir el widget FoxBot
     window.dispatchEvent(new CustomEvent('open-foxbot'));
@@ -58,10 +55,10 @@ export default function LandingPage() {
         <section className="container-fox py-16">
           <div className="text-center mb-12">
             <h2 className="font-display font-bold text-3xl text-gray-800 mb-2">
-              ¿Por qué viajar con <span className="text-fox-pink">FoxTrip</span>?
+              ¿Qué integra <span className="text-fox-pink">FOX Bus</span>?
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto">
-              La forma más cómoda y rápida de viajar por el Perú.
+              Un recorrido digital continuo para pasajeros y operadores.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -76,10 +73,10 @@ export default function LandingPage() {
           <div className="container-fox">
             <div className="text-center mb-12">
               <h2 className="font-display font-bold text-3xl text-gray-800 mb-2">
-                Ofertas destacadas
+                Tarifas demostrativas
               </h2>
               <p className="text-gray-500">
-                Aprovecha los mejores precios del momento.
+                Valores referenciales para probar el flujo de reserva.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
