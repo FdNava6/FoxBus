@@ -1,17 +1,14 @@
 // ============================================
 // LandingPage.jsx
-// Página de inicio de FOX Bus. Reúne el Hero con
+// Página de inicio de FOXTRIP. Reúne el Hero con
 // el buscador, las características, las ofertas y
 // la sección promocional de FoxBot.
 // ============================================
 import { ClipboardCheck, CreditCard, Headphones } from 'lucide-react';
-import Header from '../components/layout/Header';
-import Footer from '../components/layout/Footer';
 import Hero from '../components/landing/Hero';
 import FeatureCard from '../components/landing/FeatureCard';
 import OfferCard from '../components/landing/OfferCard';
 import FoxBotSection from '../components/landing/FoxBotSection';
-import FoxBotWidget from '../components/chatbot/FoxBotWidget';
 
 const features = [
   {
@@ -43,19 +40,19 @@ export default function LandingPage() {
     window.dispatchEvent(new CustomEvent('open-foxbot'));
   };
 
+  // El Header, el Footer y el widget FoxBot los coloca
+  // el PublicLayout (ruta anidada) para reutilizarlos
+  // en todas las pantallas públicas.
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-
-      <main>
-        {/* Hero con buscador */}
-        <Hero />
+    <main>
+      {/* Hero con buscador */}
+      <Hero />
 
         {/* Características */}
         <section className="container-fox py-16">
           <div className="text-center mb-12">
             <h2 className="font-display font-bold text-3xl text-gray-800 mb-2">
-              ¿Qué integra <span className="text-fox-pink">FOX Bus</span>?
+              ¿Qué integra <span className="text-fox-pink">FOXTRIP</span>?
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto">
               Un recorrido digital continuo para pasajeros y operadores.
@@ -89,12 +86,7 @@ export default function LandingPage() {
 
         {/* Sección FoxBot */}
         <FoxBotSection onOpenBot={openBot} />
-      </main>
-
-      <Footer />
-
-      {/* Chatbot flotante */}
-      <FoxBotWidget />
-    </div>
+    </main>
   );
 }
+

@@ -1,3 +1,11 @@
+    // ============================================
+// tripService.js
+// Capa de acceso a los datos de viajes.
+// Define el contrato de la API de búsqueda y de
+// asientos disponibles. Las pantallas usan este
+// servicio y, si la petición falla (no hay backend),
+// recurren a sus propios datos de ejemplo.
+// ============================================
     import api from './api';
 
     export const tripService = {

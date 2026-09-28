@@ -1,3 +1,15 @@
+// ============================================
+// FoxBotWidget.jsx
+// Chatbot flotante de FOXTRIP.
+// Cumple la pantalla de "ventana flotante" FoxBot:
+// - botón circular flotante que abre/cierra el chat
+// - ventana responsive (anchor en móvil, w-96 en
+//   escritorio) con lista de mensajes
+// - respuestas rápidas y simulación de escritura
+// Se muestra en todas las pantallas públicas gracias
+// al PublicLayout y escucha el evento global
+// 'open-foxbot' (disparado desde la home).
+// ============================================
 import { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -93,7 +105,7 @@ export default function FoxBotWidget() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-24 right-6 z-50 w-96 bg-white rounded-2xl shadow-2xl overflow-hidden"
+            className="fixed z-50 inset-x-4 bottom-24 sm:inset-x-auto sm:right-6 sm:w-96 flex flex-col max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-fox-pink to-fox-pink-dark p-4 text-white">
@@ -110,7 +122,7 @@ export default function FoxBotWidget() {
             </div>
 
             {/* Messages */}
-            <div className="h-96 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            <div className="flex-1 overflow-y-auto min-h-60 p-4 space-y-4 bg-gray-50">
               {messages.map((message) => (
                 <motion.div
                   key={message.id}
@@ -192,3 +204,4 @@ export default function FoxBotWidget() {
     </>
   );
 }
+

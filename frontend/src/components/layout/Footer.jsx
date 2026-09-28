@@ -1,23 +1,23 @@
 // ============================================
 // Footer.jsx
 // Pie de página con información de contacto,
-// enlaces e información del prototipo FOX Bus.
+// enlaces e información del prototipo FOXTRIP.
 // ============================================
-import { Bus, Mail, MapPin, Route } from 'lucide-react';
+import { Mail, MapPin, Route } from 'lucide-react';
+import FOXLogo from '../../assets/FOX.png';
 
 export default function Footer() {
   return (
-    <footer className="bg-fox-dark text-white mt-auto">
+    // pb extra en móvil para que la Bottom Nav (fixed) no tape el pie.
+    <footer className="bg-fox-dark text-white mt-auto pb-14 sm:pb-0">
       <div className="container-fox py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Marca */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-fox-pink text-white rounded-xl">
-                <Bus className="w-5 h-5" />
-              </div>
+<div className="flex items-center gap-2 mb-4">
+              <img src={FOXLogo} alt="FOXTRIP" className="h-10 w-10 rounded-xl object-contain" />
               <span className="font-display font-bold text-xl">
-                FOX <span className="text-fox-pink">Bus</span>
+                FOX<span className="text-fox-pink">TRIP</span>
               </span>
             </div>
             <p className="text-gray-400 text-sm">
@@ -62,9 +62,10 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-white/10 mt-8 pt-6 text-center text-sm text-gray-500">
-          © 2026 FOX Bus · Proyecto académico de innovación.
+          © 2026 FOXTRIP · Proyecto académico de innovación.
         </div>
       </div>
     </footer>
   );
 }
+

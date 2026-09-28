@@ -1,12 +1,12 @@
-# Avance 1 — Idea de innovación FOX Bus
+# Avance 1 — Idea de innovación FOXTRIP
 
 ## 1. Título
 
-**FOX Bus: plataforma digital para la trazabilidad del pasaje en viajes interprovinciales**
+**FOXTRIP: plataforma digital para la trazabilidad del pasaje en viajes interprovinciales**
 
 ## 2. Descripción breve
 
-FOX Bus es una propuesta de plataforma web que integra la búsqueda de viajes, la selección de asientos, la reserva, el boleto digital y la atención posventa. Su propósito es que el pasajero pueda conocer y gestionar el estado de su pasaje desde un solo canal, mientras el operador visualiza reservas, ocupación e incidencias en un panel administrativo.
+FOXTRIP es una propuesta de plataforma web que integra la búsqueda de viajes, la selección de asientos, la reserva, el boleto digital y la atención posventa. Su propósito es que el pasajero pueda conocer y gestionar el estado de su pasaje desde un solo canal, mientras el operador visualiza reservas, ocupación e incidencias en un panel administrativo.
 
 El Avance 1 presenta un prototipo frontend. Cuando no hay backend disponible, utiliza datos simulados y lo comunica de forma explícita. Las integraciones productivas se mantienen como trabajo futuro.
 
@@ -56,7 +56,7 @@ Antes de afirmar magnitudes o porcentajes, el equipo debe validar la hipótesis 
 
 ## 5. Creatividad e innovación
 
-Las plataformas de venta de pasajes, los códigos QR y los chatbots existen por separado. La propuesta diferenciadora de FOX Bus es mantener una trazabilidad continua de la reserva y vincular en un mismo flujo la compra, el abordaje, la posventa y la supervisión operativa.
+Las plataformas de venta de pasajes, los códigos QR y los chatbots existen por separado. La propuesta diferenciadora de FOXTRIP es mantener una trazabilidad continua de la reserva y vincular en un mismo flujo la compra, el abordaje, la posventa y la supervisión operativa.
 
 La innovación deberá compararse con alternativas existentes antes de la entrega final. No debe describirse como una solución inédita sin evidencia.
 
@@ -98,3 +98,4 @@ La propuesta es técnicamente viable como prototipo porque el equipo ya dispone 
 | Falta de evidencia del problema | Realizar validación antes de presentar resultados cuantitativos. |
 | Dependencia de integraciones externas | Simular pagos y QR durante el primer avance. |
 | Aportes grupales poco visibles | Trabajar mediante ramas y pull requests individuales. |
+

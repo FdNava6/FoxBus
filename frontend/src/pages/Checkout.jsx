@@ -6,8 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CreditCard, CheckCircle } from 'lucide-react';
-import Header from '../components/layout/Header';
-import Footer from '../components/layout/Footer';
+import Button from '../components/common/Button';
 import DemoBanner from '../components/common/DemoBanner';
 import { useCartStore } from '../store/useCartStore';
 import { reservationService } from '../services/reservationService';
@@ -61,11 +60,10 @@ export default function Checkout() {
   // Resumen del pedido
   const total = totalPrice || (seats.length * (trip?.price || 85));
 
+  // El Header y el Footer los añade el PublicLayout.
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-1 bg-gray-50">
-        <div className="container-fox py-10">
+    <main className="bg-gray-50">
+      <div className="container-fox py-10">
           <DemoBanner className="mb-6" />
           <button
             onClick={() => navigate(ROUTES.SEAT_SELECTION)}
@@ -95,15 +93,15 @@ export default function Checkout() {
                 <p className="text-sm text-gray-500 mb-1">Código de reserva</p>
                 <p className="font-mono font-bold text-fox-pink text-2xl">{bookingCode}</p>
               </div>
-              <button
+              <Button
+                fullWidth
                 onClick={() => {
                   clearCart();
                   navigate(ROUTES.MY_TRIPS);
                 }}
-                className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all"
               >
                 Ver mis viajes
-              </button>
+              </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -194,13 +192,11 @@ export default function Checkout() {
                       </div>
                     </div>
 
-                    <button
-                      type="submit"
-                      disabled={processing}
-                      className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all disabled:opacity-50"
-                    >
-                      {processing ? 'Generando reserva...' : `Generar reserva demo · ${formatCurrency(total)}`}
-                    </button>
+                    <Button type="submit" fullWidth disabled={processing}>
+                      {processing
+                        ? 'Generando reserva...'
+                        : `Generar reserva demo · ${formatCurrency(total)}`}
+                    </Button>
                   </form>
                 </div>
               </div>
@@ -240,8 +236,6 @@ export default function Checkout() {
             </div>
           )}
         </div>
-      </main>
-      <Footer />
-    </div>
+    </main>
   );
 }

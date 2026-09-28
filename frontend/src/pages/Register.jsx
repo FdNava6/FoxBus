@@ -1,6 +1,10 @@
 // ============================================
 // Register.jsx
-// Página de registro de nuevos usuarios.
+// Página de registro de nuevos usuarios (/register).
+// Formulario controlado (5 campos) con validación por
+// campo y confirmación de contraseña. Los campos
+// reutilizan el componente Input (con icono) y el
+// botón Button.
 // ============================================
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -9,6 +13,8 @@ import { userService } from '../services/userService';
 import { useAuthStore } from '../store/useAuthStore';
 import { ROUTES } from '../utils/constants';
 import { validateEmail } from '../utils/validations';
+import Input from '../components/common/Input';
+import Button from '../components/common/Button';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -69,118 +75,84 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-fox-dark to-fox-pink-dark p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
-        <div className="flex justify-center mb-6">
-          <div className="p-3 bg-fox-pink text-white rounded-2xl">
+    <div className="flex min-h-[100svh] items-center justify-center bg-gradient-to-br from-fox-dark to-fox-pink-dark p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <div className="mb-6 flex justify-center">
+          <div className="rounded-2xl bg-fox-pink p-3 text-white">
             <Bus className="w-8 h-8" />
           </div>
         </div>
-        <h1 className="font-display font-bold text-2xl text-center text-gray-800 mb-1">
+        <h1 className="mb-1 text-center font-display text-2xl font-bold text-gray-800">
           Crea tu cuenta
         </h1>
-        <p className="text-center text-gray-500 text-sm mb-8">
-          Únete a FOX Bus y empieza a viajar
+        <p className="mb-8 text-center text-sm text-gray-500">
+          Únete a FOXTRIP y empieza a viajar
         </p>
 
         {serverError && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm">
+          <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
             {serverError}
           </div>
         )}
 
+        {/* Formulario de registro */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                placeholder="Juan Pérez"
-                className={`input pl-10 ${errors.name ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="correo@ejemplo.com"
-                className={`input pl-10 ${errors.email ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="tel"
-                name="phone"
-                value={form.phone}
-                onChange={handleChange}
-                placeholder="999 999 999"
-                className="input pl-10"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className={`input pl-10 ${errors.password ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contraseña</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="password"
-                name="confirmPassword"
-                value={form.confirmPassword}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className={`input pl-10 ${errors.confirmPassword ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.confirmPassword && <p className="mt-1 text-sm text-red-500">{errors.confirmPassword}</p>}
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all"
-          >
+          <Input
+            label="Nombre completo"
+            name="name"
+            value={form.name}
+            onChange={handleChange}
+            placeholder="Juan Pérez"
+            icon={<User className="w-5 h-5" />}
+            error={errors.name}
+          />
+          <Input
+            label="Correo"
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="correo@ejemplo.com"
+            icon={<Mail className="w-5 h-5" />}
+            error={errors.email}
+          />
+          <Input
+            label="Teléfono"
+            type="tel"
+            name="phone"
+            value={form.phone}
+            onChange={handleChange}
+            placeholder="999 999 999"
+            icon={<Phone className="w-5 h-5" />}
+          />
+          <Input
+            label="Contraseña"
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="••••••••"
+            icon={<Lock className="w-5 h-5" />}
+            error={errors.password}
+          />
+          <Input
+            label="Confirmar contraseña"
+            type="password"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            placeholder="••••••••"
+            icon={<Lock className="w-5 h-5" />}
+            error={errors.confirmPassword}
+          />
+          <Button type="submit" fullWidth disabled={loading}>
             {loading ? 'Creando cuenta...' : 'Crear cuenta'}
-          </button>
+          </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
+        <p className="mt-6 text-center text-sm text-gray-500">
           ¿Ya tienes cuenta?{' '}
-          <Link to={ROUTES.LOGIN} className="text-fox-pink font-medium hover:underline">
+          <Link to={ROUTES.LOGIN} className="font-medium text-fox-pink hover:underline">
             Inicia sesión
           </Link>
         </p>

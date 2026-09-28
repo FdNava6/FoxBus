@@ -1,4 +1,4 @@
-# FOX Bus
+# FOXTRIP
 
 Prototipo académico de una plataforma web para mejorar la trazabilidad del pasaje en viajes interprovinciales, desde la búsqueda y reserva hasta el abordaje y la atención posventa.
 
@@ -12,7 +12,7 @@ Para el Avance 1 se propone validar esta problemática en un piloto de la ruta *
 
 ## Propuesta de innovación
 
-FOX Bus plantea unificar en una sola experiencia:
+FOXTRIP plantea unificar en una sola experiencia:
 
 - búsqueda de viajes y selección visual de asientos;
 - reserva digital con estado trazable;
@@ -107,3 +107,4 @@ La presentación incluye notas del expositor con una distribución sugerida entr
 Curso: **Innovación y Transformación Digital**, sección 41555, modalidad presencial.
 
 Docente: **Carlos Fernando Zamora Guanilo**.
+

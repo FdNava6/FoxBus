@@ -7,8 +7,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MapPin, Clock, Users, ArrowRight, Bus } from 'lucide-react';
-import Header from '../components/layout/Header';
-import Footer from '../components/layout/Footer';
 import Loading from '../components/common/Loading';
 import { useTripStore } from '../store/useTripStore';
 import { useCartStore } from '../store/useCartStore';
@@ -109,11 +107,10 @@ export default function SearchResults() {
     navigate(ROUTES.SEAT_SELECTION);
   };
 
+  // El Header y el Footer los añade el PublicLayout.
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-1 bg-gray-50">
-        <div className="container-fox py-10">
+    <main className="bg-gray-50">
+      <div className="container-fox py-10">
           <h1 className="font-display font-bold text-2xl text-gray-800 mb-1">
             Viajes disponibles
           </h1>
@@ -180,8 +177,6 @@ export default function SearchResults() {
             </div>
           )}
         </div>
-      </main>
-      <Footer />
-    </div>
+    </main>
   );
 }

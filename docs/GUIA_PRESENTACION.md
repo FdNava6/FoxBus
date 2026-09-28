@@ -4,11 +4,11 @@ Duración objetivo: **4 minutos y 30 segundos**. La presentación puede resolver
 
 ## Diapositiva 1 — Título y contexto (30 segundos)
 
-- FOX Bus.
+- FOXTRIP.
 - Ruta piloto Lima–Trujillo.
 - Idea principal: trazabilidad digital del pasaje.
 
-Frase sugerida: “FOX Bus busca que la información del pasaje acompañe al usuario desde la compra hasta la atención posventa en un solo canal”.
+Frase sugerida: “FOXTRIP busca que la información del pasaje acompañe al usuario desde la compra hasta la atención posventa en un solo canal”.
 
 ## Diapositiva 2 — Problema (50 segundos)
 
@@ -53,3 +53,4 @@ Todos los integrantes deberían poder explicar:
 3. qué funciones existen y cuáles son propuestas;
 4. por qué el alcance es viable;
 5. cómo se validará la necesidad con usuarios reales.
+

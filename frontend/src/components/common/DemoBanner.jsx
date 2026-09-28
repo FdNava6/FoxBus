@@ -1,3 +1,10 @@
+// ============================================
+// DemoBanner.jsx
+// Aviso reutilizable de "modo demostración".
+// Muestra que los datos son simulados para evitar
+// expectativas de un backend real durante la
+// presentación académica.
+// ============================================
 import { Info } from 'lucide-react';
 
 export default function DemoBanner({ className = '' }) {

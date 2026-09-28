@@ -1,10 +1,10 @@
-# FOX Bus — Frontend
+# FOXTRIP — Frontend
 
 Sistema de venta de pasajes en línea.
 
 ## Descripción
 
-Frontend del prototipo académico **FOX Bus**. Permite buscar viajes, seleccionar asientos, generar una reserva demostrativa, consultar viajes y explorar un dashboard con datos simulados.
+Frontend del prototipo académico **FOXTRIP**. Permite buscar viajes, seleccionar asientos, generar una reserva demostrativa, consultar viajes y explorar un dashboard con datos simulados.
 
 > Este MVP no procesa pagos, correos, códigos QR ni datos operativos reales. Consulta la [documentación general](../README.md) para conocer el alcance.
 
@@ -76,3 +76,4 @@ frontend/
 ## Notas
 
 El backend se desarrollará posteriormente. Los servicios usan datos de ejemplo mientras no exista una API conectada. La interfaz identifica expresamente el modo demostración para evitar confundir el prototipo con una operación real.
+

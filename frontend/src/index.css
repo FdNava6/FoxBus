@@ -1,3 +1,12 @@
+/* ============================================
+   index.css
+   Hoja de estilos global de FOXTRIP.
+   - Tailwind (base/components/utilities)
+   - estilos base (html, body, #root)
+   - utilidades reutilizables (.container-fox,
+     .btn*, .input, .card) y ajustes de
+     accesibilidad para móvil
+   ============================================ */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -20,6 +29,21 @@
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
+  }
+
+  /* Elementos táctiles: sin recuadro azul al tocar en móvil */
+  button, a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  /* Accesibilidad: desactiva el scroll suave para quien
+     prefiera menos movimiento en el sistema operativo */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 }
 

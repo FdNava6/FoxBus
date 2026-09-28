@@ -1,3 +1,8 @@
+// ============================================
+// useCartStore.test.js
+// Pruebas unitarias del store del carrito
+// (node:test, sin dependencias externas).
+// ============================================
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { useCartStore } from './useCartStore.js';

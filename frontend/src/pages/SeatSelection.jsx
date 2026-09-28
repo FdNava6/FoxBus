@@ -7,8 +7,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bus, ArrowLeft, Armchair } from 'lucide-react';
-import Header from '../components/layout/Header';
-import Footer from '../components/layout/Footer';
 import { useCartStore } from '../store/useCartStore';
 import { ROUTES } from '../utils/constants';
 import { formatCurrency } from '../utils/helpers';
@@ -60,11 +58,10 @@ export default function SeatSelection() {
 
   const total = selectedSeats.length * (trip?.price || 85);
 
+  // El Header y el Footer los añade el PublicLayout.
   return (
-    <div className="flex flex-col min-h-screen">
-      <Header />
-      <main className="flex-1 bg-gray-50">
-        <div className="container-fox py-10">
+    <main className="bg-gray-50">
+      <div className="container-fox py-10">
           <button
             onClick={() => navigate(ROUTES.SEARCH)}
             className="flex items-center gap-2 text-gray-500 hover:text-fox-pink mb-6 transition"
@@ -184,9 +181,7 @@ export default function SeatSelection() {
             </div>
           </div>
         </div>
-      </main>
-      <Footer />
-    </div>
+    </main>
   );
 }
 

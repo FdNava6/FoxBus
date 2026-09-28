@@ -1,19 +1,28 @@
 // ============================================
 // Login.jsx
-// Página de inicio de sesión. Autentica al usuario
-// y lo redirige a la página de inicio.
+// Página de inicio de sesión (/login).
+// Formulario controlado con validación por campo.
+// Como todavía no hay backend, incluye accesos de
+// demostración (pasajero / administrador) para
+// poder recorrer el flujo y el panel admin.
 // ============================================
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Bus } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Mail, Lock, Bus, ShieldCheck, UserRound } from 'lucide-react';
 import { userService } from '../services/userService';
 import { useAuthStore } from '../store/useAuthStore';
 import { ROUTES } from '../utils/constants';
 import { validateEmail } from '../utils/validations';
+import Input from '../components/common/Input';
+import Button from '../components/common/Button';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const login = useAuthStore((s) => s.login);
+
+  // Si vinimos del guard RequireAdmin, `state.from` guarda la pantalla que se quería visitar.
+  const redirectTo = location.state?.from || ROUTES.HOME;
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
@@ -33,6 +42,8 @@ export default function Login() {
     return newErrors;
   };
 
+  // Intenta autenticar contra la API (aún sin backend =>
+  // cae en el mensaje de error y se ofrecen los accesos demo).
   const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = validate();
@@ -45,8 +56,8 @@ export default function Login() {
     setServerError('');
     try {
       const data = await userService.login(form.email, form.password);
-      login(data.user || { email: form.email }, data.token || 'demo-token');
-      navigate(ROUTES.HOME);
+      login(data.user || { name: '', email: form.email, role: 'user' }, data.token || 'demo-token');
+      navigate(redirectTo);
     } catch {
       setServerError('El inicio de sesión requiere el backend, que todavía no está conectado en este MVP.');
     } finally {
@@ -54,72 +65,86 @@ export default function Login() {
     }
   };
 
+  // Accesos de demostración sin servidor real.
+  const demoLogin = (role) => {
+    const user =
+      role === 'admin'
+        ? { name: 'Administrador', email: 'admin@foxbus.pe', role: 'admin' }
+        : { name: 'Pasajero', email: 'pasajero@foxbus.pe', role: 'user' };
+    login(user, 'demo-token');
+    // El admin demo aterriza en su panel; el pasajero demo
+    // continúa hacia la pantalla que había pedido o a la home.
+    navigate(role === 'admin' ? ROUTES.ADMIN : redirectTo);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-fox-dark to-fox-pink-dark p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
-        <div className="flex justify-center mb-6">
-          <div className="p-3 bg-fox-pink text-white rounded-2xl">
+    // 100svh en vez de 100vh: evita el desborde por la barra de dirección del móvil.
+    <div className="flex min-h-[100svh] items-center justify-center bg-gradient-to-br from-fox-dark to-fox-pink-dark p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <div className="mb-6 flex justify-center">
+          <div className="rounded-2xl bg-fox-pink p-3 text-white">
             <Bus className="w-8 h-8" />
           </div>
         </div>
-        <h1 className="font-display font-bold text-2xl text-center text-gray-800 mb-1">
+        <h1 className="mb-1 text-center font-display text-2xl font-bold text-gray-800">
           Bienvenido de nuevo
         </h1>
-        <p className="text-center text-gray-500 text-sm mb-8">
-          Inicia sesión en FOX Bus
-        </p>
+        <p className="mb-8 text-center text-sm text-gray-500">Inicia sesión en FOXTRIP</p>
 
         {serverError && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-xl text-sm">
+          <div className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">
             {serverError}
           </div>
         )}
 
+        {/* Formulario de inicio de sesión */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Correo</label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="correo@ejemplo.com"
-                className={`input pl-10 ${errors.email ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                className={`input pl-10 ${errors.password ? 'border-red-400' : ''}`}
-              />
-            </div>
-            {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all"
-          >
+          <Input
+            label="Correo"
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="correo@ejemplo.com"
+            icon={<Mail className="w-5 h-5" />}
+            error={errors.email}
+          />
+          <Input
+            label="Contraseña"
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            placeholder="••••••••"
+            icon={<Lock className="w-5 h-5" />}
+            error={errors.password}
+          />
+          <Button type="submit" fullWidth disabled={loading}>
             {loading ? 'Ingresando...' : 'Iniciar sesión'}
-          </button>
+          </Button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
+        {/* Accesos de demostración (sin backend) */}
+        <div className="mt-6 rounded-xl border border-dashed border-fox-pink/40 bg-fox-pink/5 p-4">
+          <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-fox-pink">
+            Acceso de demostración
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" size="sm" onClick={() => demoLogin('user')}>
+              <UserRound className="w-4 h-4" /> Pasajero
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => demoLogin('admin')}>
+              <ShieldCheck className="w-4 h-4" /> Admin
+            </Button>
+          </div>
+          <p className="mt-3 text-center text-[11px] text-gray-400">
+            Simula una sesión local para recorrer el prototipo.
+          </p>
+        </div>
+
+        <p className="mt-6 text-center text-sm text-gray-500">
           ¿No tienes cuenta?{' '}
-          <Link to={ROUTES.REGISTER} className="text-fox-pink font-medium hover:underline">
+          <Link to={ROUTES.REGISTER} className="font-medium text-fox-pink hover:underline">
             Regístrate aquí
           </Link>
         </p>

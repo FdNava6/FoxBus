@@ -1,69 +1,61 @@
 // ============================================
 // AdminLayout.jsx
 // Layout del panel de administración.
-// Combina la Sidebar con el contenido y el header
-// superior del panel. Envuelve todas las páginas admin.
+// Distintivo: un PANEL DE CONTROL LATERAL (sidebar)
+// donde el administrador ve todas sus opciones.
+//
+// La barra lateral se adapta a la pantalla: ocupa
+// todo el alto de la ventana (h-screen + sticky) y
+// queda siempre visible junto al contenido, sin
+// menús ni paneles que se deslicen.
+// El contenido de cada pantalla (Métricas, Reservas,
+// Pasajeros, Ofertas) se renderiza en <Outlet/> vía
+// las rutas anidadas definidas en App.jsx.
 // ============================================
-import { useState } from 'react';
-import { Bell, Search, Menu, X } from 'lucide-react';
+import { Outlet } from 'react-router-dom';
+import { Bell, Search } from 'lucide-react';
 import Sidebar from '../admin/Sidebar';
 
-export default function AdminLayout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
+export default function AdminLayout() {
   return (
-    <div className="flex bg-gray-50 min-h-screen">
-      {/* Sidebar desktop */}
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
+    <div className="flex min-h-screen bg-gray-50">
+      {/* Panel de control lateral: siempre visible y adaptado a la altura */}
+      <Sidebar />
 
-      {/* Sidebar mobile */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className="absolute left-0 top-0 h-full">
-            <Sidebar />
-          </div>
-        </div>
-      )}
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top bar */}
-        <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden text-gray-700"
-            >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+      {/* Columna principal */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior */}
+        <header className="sticky top-0 z-30 bg-white shadow-sm">
+          <div className="flex items-center justify-between px-4 py-3 sm:px-6">
             <div>
-              <h2 className="font-display font-semibold text-gray-800">Administración</h2>
+              <h2 className="font-display font-semibold text-gray-800">Panel de administración</h2>
               <p className="text-xs text-gray-500">Vista con datos simulados</p>
             </div>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
-              <Search className="w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Búsqueda disponible próximamente"
-                disabled
-                className="bg-transparent outline-none text-sm"
-              />
+            <div className="flex items-center gap-4">
+              <div className="hidden items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 lg:flex">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Búsqueda"
+                  className="bg-transparent text-sm outline-none"
+                />
+              </div>
+              <button
+                className="relative text-gray-400 transition hover:text-gray-600"
+                aria-label="Notificaciones de demostración"
+              >
+                <Bell className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-fox-pink" />
+              </button>
             </div>
-            <button className="relative text-gray-400" disabled aria-label="Notificaciones de demostración">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-fox-pink rounded-full" />
-            </button>
           </div>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 p-6">{children}</main>
+        {/* Contenido de la pantalla admin actual (Outlet) */}
+        <main className="flex-1 p-4 lg:p-6">
+          <Outlet />
+        </main>
       </div>
     </div>
   );

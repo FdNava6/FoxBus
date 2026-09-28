@@ -1,6 +1,6 @@
 // ============================================
 // constants.js
-// Constantes globales de la aplicación FOX Bus.
+// Constantes globales de la aplicación FOXTRIP.
 // Aquí se centralizan valores reutilizables como
 // rutas de navegación, ciudades, servicios del bus,
 // métodos de pago y estados.
@@ -58,3 +58,4 @@ export const RESERVATION_STATUS = {
   PAID: 'Pagado',
   CANCELLED: 'Cancelado',
 };
+

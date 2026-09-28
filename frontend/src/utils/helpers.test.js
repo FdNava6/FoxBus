@@ -1,3 +1,8 @@
+// ============================================
+// helpers.test.js
+// Pruebas unitarias de las funciones auxiliares
+// de formato (moneda, fecha y código de reserva).
+// ============================================
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { formatCurrency, formatDate, generateBookingCode } from './helpers.js';

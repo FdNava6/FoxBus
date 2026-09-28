@@ -1,3 +1,10 @@
+    // ============================================
+// useCartStore.js
+// Store de Zustand del "carrito" de reserva.
+// Conserva el viaje seleccionado, los asientos
+// elegidos y el total calculado mientras el usuario
+// avanza por el flujo: búsqueda → asientos → pago.
+// ============================================
     import { create } from 'zustand';
 
     export const useCartStore = create((set) => ({

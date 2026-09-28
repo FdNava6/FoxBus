@@ -1,3 +1,10 @@
+// ============================================
+// SearchBox.jsx
+// Buscador de viajes (formulario) de la home.
+// Un estado local reúne origen, destino, fecha y
+// pasajeros; al enviar navega a /resultados con ese
+// estado (query) mediante location.state.
+// ============================================
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Calendar, Users, Search } from 'lucide-react';

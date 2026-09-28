@@ -1,3 +1,12 @@
+    // ============================================
+// Métricas (Dashboard) - página /admin
+// Página principal del panel, llega ya envuelta
+// por el AdminLayout (definido en App.jsx).
+// Solo muestra métricas: KPIs (tarjetas), gráficos
+// de ventas con Recharts y alertas + estado de la
+// flota, todos con datos simulados. Las reservas
+// se gestionan en su propia sección (/admin/reservas).
+// ============================================
     import { 
     DollarSign, 
     Ticket, 
@@ -7,7 +16,6 @@
     Bell
     } from 'lucide-react';
     import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-    import AdminLayout from '../../components/layout/AdminLayout';
     import DemoBanner from '../../components/common/DemoBanner';
 
     const salesData = [
@@ -26,14 +34,6 @@
     { name: 'Lima - Piura', value: 18, color: '#3B82F6' },
     { name: 'Lima - Cajamarca', value: 12, color: '#10B981' },
     { name: 'Lima - Arequipa', value: 8, color: '#F59E0B' },
-    ];
-
-    const recentReservations = [
-    { code: 'BS-82931', passenger: 'Juan Pérez', route: 'Lima → Trujillo', date: '28 Ago 2026', seat: '12A', status: 'Pagado', payment: 'VISA **** 4242' },
-    { code: 'BS-82930', passenger: 'María López', route: 'Lima → Chiclayo', date: '28 Ago 2026', seat: '08C', status: 'Pagado', payment: 'Yape' },
-    { code: 'BS-82929', passenger: 'Carlos Ramirez', route: 'Lima → Piura', date: '28 Ago 2026', seat: '15B', status: 'Pagado', payment: 'Plin' },
-    { code: 'BS-82928', passenger: 'Ana Torres', route: 'Lima → Trujillo', date: '28 Ago 2026', seat: '10D', status: 'Pendiente', payment: 'Yape' },
-    { code: 'BS-82927', passenger: 'Luis Fernández', route: 'Lima → Cajamarca', date: '29 Ago 2026', seat: '03A', status: 'Pagado', payment: 'Mastercard **** 1111' },
     ];
 
     const alerts = [
@@ -57,9 +57,9 @@
     ];
 
     export default function Dashboard() {
-    return (
-        <AdminLayout>
-        <DemoBanner className="mb-6" />
+  return (
+    <>
+      <DemoBanner className="mb-6" />
 
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -69,10 +69,13 @@
             </h1>
             <p className="text-gray-500">Escenario de referencia · 28 Ago 2026</p>
             </div>
-            <button disabled title="Disponible con el backend" className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-gray-400">
+<button
+            className="flex items-center gap-2 rounded-lg bg-fox-pink px-4 py-2 text-white transition hover:bg-fox-pink-dark"
+            aria-label="Descargar reporte (disponible en la siguiente iteración)"
+          >
             <Download className="w-5 h-5" />
             Descargar reporte
-            </button>
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -181,82 +184,22 @@
             </div>
         </div>
 
-        {/* Recent Reservations & Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Reservations Table */}
-            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-display font-semibold text-gray-800">
-                Reservas recientes
-                </h3>
-                <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
-                Vista demostrativa
-                </button>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                <thead className="bg-gray-50">
-                    <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Código</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pasajero</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ruta</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asiento</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pago</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acción</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {recentReservations.map((reservation, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-medium text-fox-pink">{reservation.code}</td>
-                        <td className="px-6 py-4 text-sm text-gray-800">{reservation.passenger}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{reservation.route}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{reservation.date}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{reservation.seat}</td>
-                        <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            reservation.status === 'Pagado' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                            {reservation.status}
-                        </span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{reservation.payment}</td>
-                        <td className="px-6 py-4">
-                        <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
-                            Demo
-                        </button>
-                        </td>
-                    </tr>
-                    ))}
-                </tbody>
-                </table>
-            </div>
-            <div className="p-4 border-t border-gray-100 flex justify-between items-center">
-                <p className="text-sm text-gray-500">Mostrando 1 a 5 de 10 reservas</p>
-                <div className="flex gap-2">
-                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">&lt;</button>
-                <button className="px-3 py-1 bg-fox-pink text-white rounded-lg text-sm">1</button>
-                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">2</button>
-                <button disabled className="px-3 py-1 border border-gray-200 rounded-lg text-sm text-gray-300">&gt;</button>
-                </div>
-            </div>
-            </div>
-
+        {/* Alertas y estado de la flota */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Alerts */}
-            <div className="space-y-4">
+            <div className="space-y-4 lg:col-span-2">
             <h3 className="font-display font-semibold text-gray-800 flex items-center gap-2">
                 <Bell className="w-5 h-5 text-fox-pink" />
                 Alertas inteligentes
             </h3>
-            
+
             {alerts.map((alert, idx) => (
                 <AlertCard key={idx} alert={alert} />
             ))}
-            
+            </div>
+
+            {/* Buses en operación */}
+            <div className="space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm">
                 <h4 className="font-semibold text-gray-800 mb-4">Buses en operación hoy</h4>
                 <div className="text-4xl font-bold text-gray-800 mb-2">52</div>
@@ -277,11 +220,11 @@
             </div>
             </div>
         </div>
-        </AdminLayout>
-    );
-    }
+    </>
+  );
+}
 
-    function StatCard({ title, value, change, positive, icon, color }) {
+function StatCard({ title, value, change, positive, icon, color }) {
     const colors = {
         pink: 'bg-pink-50 text-pink-600',
         purple: 'bg-purple-50 text-purple-600',
@@ -316,13 +259,13 @@
 
     return (
         <div className={`p-4 rounded-xl border ${styles[alert.type]}`}>
-        <div className="flex items-start justify-between mb-2">
+<div className="flex items-start justify-between mb-2">
             <h4 className="font-semibold text-gray-800">{alert.title}</h4>
-            <button disabled aria-label="Cerrar alerta" className="text-gray-300">×</button>
-        </div>
+            <button aria-label="Cerrar alerta" className="text-gray-400 transition hover:text-gray-600">×</button>
+          </div>
         <p className="text-sm text-gray-600 mb-3">{alert.message}</p>
-        <button disabled className="cursor-not-allowed text-sm font-medium text-gray-400">
-            Detalle próximamente
+        <button className="text-sm font-medium text-fox-pink">
+            Ver detalle
         </button>
         </div>
     );
