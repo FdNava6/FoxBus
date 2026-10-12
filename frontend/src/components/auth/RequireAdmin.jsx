@@ -7,23 +7,21 @@
 // - Si todo está bien, renderiza el controlador que
 //   recibe como hijo (el AdminLayout con su sidebar).
 // ============================================
-import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../../store/useAuthStore';
-import { ROUTES } from '../../utils/constants';
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuthStore } from "../../store/useAuthStore";
+import { ROUTES } from "../../utils/constants";
 
 export default function RequireAdmin({ children }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const checking = useAuthStore((s) => s.checking);
   const location = useLocation();
 
+  if (checking) return <p className="p-8">Verificando permisos...</p>;
   if (!isAuthenticated) {
     // Recuerda a dónde quería ir el usuario para llevarlo tras iniciar sesión.
     return (
-      <Navigate
-        to={ROUTES.LOGIN}
-        state={{ from: location.pathname }}
-        replace
-      />
+      <Navigate to={ROUTES.LOGIN} state={{ from: location.pathname }} replace />
     );
   }
 

@@ -1,72 +1,78 @@
-# Backend FOXbus: reservas y plazos
+# FOXbus: reservas, operación y pagos
 
-Servicio HTTP con SQLite persistente. Requiere Node.js >= 22.13 (recomendado: 24 LTS) y no requiere paquetes adicionales.
+Backend Node.js 24 LTS + SQLite, con migraciones versionadas y datos persistentes.
 
-## Arranque
+## Desarrollo local
 
-Desde `backend`:
+Desde backend: copiar .env.example a .env y ejecutar npm ci y npm start. En PowerShell: Copy-Item .env.example .env. Desde frontend: npm ci y npm run dev.
 
-```bash
-cp .env.example .env
-npm start
-```
+El ejemplo habilita salidas de muestra para siete días, pago sin cobro y buzón local. Estas opciones se desactivan con NODE_ENV=production. Consultar /api/health para conocer configuración y estado de jobs. Una salida se publica explícitamente: buscar una fecha no crea viajes.
 
-En PowerShell: `Copy-Item .env.example .env`. La base se crea y la migración se aplica automáticamente en `backend/data/foxbus.sqlite`. Los horarios y precios iniciales son datos de muestra del piloto Lima–Trujillo. Arrancar el frontend en otra terminal (`cd frontend && npm ci && npm run dev`).
+## Reglas de tiempo y pasajeros
 
-## Flujo y estado
+- Selección/datos: 10 minutos, sin renovación por consulta, recarga o reintento.
+- Reserva confirmada: 2 horas completas para registrar el pago.
+- Las nuevas reservas se cierran 10 minutos + 2 horas + el margen de presentación antes de salir. El margen por defecto es 30 minutos y se configura por salida. No hay reservas diferidas que venzan después del abordaje.
+- Asiento único por servicio y fecha, compartido entre web y caja. Cada salida tiene vehículo, mapa, terminales, fechas UTC y estado.
+- Entre 1 y 6 viajeros por reserva, tres reservas activas por identidad. Cada asiento exige un viajero, documento y nacimiento; se admiten DNI, CE y pasaporte. Un menor requiere adulto responsable declarado; la verificación legal/documental corresponde al operador.
+- El servidor calcula importes y no confía en estados o plazos del cliente.
 
-1. `POST /api/reservations/sessions` crea `active_session` con `session_expires_at = ahora del servidor + 10 minutos`.
-2. Cada selección se guarda con `PUT /api/reservations/:code/seats`. Los asientos se retienen de inmediato. La clave única `(trip_id, travel_date, seat)` impide reservas dobles.
-3. `POST /api/reservations/:code/confirm` valida pasajero y asientos; cambia a `pending_payment` y fija `payment_deadline_at = confirmed_at + 2 horas`. Confirmar no registra un pago. Repetir la confirmación no renueva el plazo.
-4. Pago validado antes del límite: `paid`; conserva los asientos vendidos.
-5. Vencimiento de sesión: `expired / session_timeout`. Vencimiento de pago: `cancelled / payment_timeout`. Cancelación voluntaria: `cancelled / user_cancelled`. Estos estados eliminan las retenciones y conservan la selección histórica.
+El job limpia vencimientos cada segundo y al arrancar. Las operaciones aplican además limpieza transaccional. Si el proceso se detiene, los vencimientos se recuperan al reiniciarlo. La API y el job usan SQLite WAL y BEGIN IMMEDIATE con savepoint por operación; una operación rechazada revierte sus modificaciones.
 
-Todas las fechas de control son ISO UTC; la pantalla muestra el límite en America/Lima. El límite es exclusivo: a `ahora >= vencimiento` ya no se admite confirmar/pagar. El cliente no puede fijar importes, estados ni plazos. Las recargas y reintentos usan la misma clave de sesión y el mismo vencimiento.
+## Cuentas y permisos
 
-## Jobs y reinicios
+Las contraseñas se almacenan mediante scrypt con sal aleatoria. Sesiones de siete días mediante cookie HttpOnly/SameSite y Secure en producción. Se revocan al cerrar sesión o cambiar contraseña. No hay botones de acceso administrativo demo.
 
-El proceso del servidor limpia vencimientos al arrancar y cada 15 segundos (`EXPIRATION_JOB_INTERVAL_MS`). Cada operación de disponibilidad, selección, consulta, confirmación, pago o cancelación también aplica la limpieza en una transacción; un asiento vencido nunca se asigna como ocupado ni se acepta un pago fuera de plazo aunque el job todavía no haya ejecutado su siguiente ciclo.
+Crear la primera cuenta administrativa local: definir FOXBUS_ADMIN_EMAIL, FOXBUS_ADMIN_PASSWORD (mínimo 12 caracteres) y opcionalmente FOXBUS_ADMIN_NAME en el entorno privado, y ejecutar npm run admin. No se proporcionan contraseñas por defecto ni se escriben en Git.
 
-La liberación modifica la base aunque el navegador esté cerrado. Si el backend está detenido, la base no puede actualizarse hasta que el servicio o el cron vuelvan a ejecutarse; al reiniciar se recuperan todos los vencimientos antes de escuchar peticiones.
+Roles:
+- passenger: sus reservas y solicitudes.
+- agent: reservas, ventanilla y atención.
+- finance: conciliación, efectivo verificado y registro de devoluciones.
+- boarding: control de abordaje.
+- admin: operación, políticas, buses y personal.
 
-Job independiente: desde `backend`, `npm run expire` (usa la misma `.env` y base).
+El personal se crea desde el panel por un administrador. Los permisos se verifican en cada endpoint. Para compras sin cuenta se usa una credencial aleatoria del navegador y recuperación mediante correo; un enlace expira en 30 minutos y solo se consume una vez. Una cuenta permite consultar desde distintos dispositivos.
 
-Ejemplo cron del host donde se despliegue el backend:
+El límite general aplica por identidad (240 solicitudes/minuto) y por IP (1000/minuto), para no tratar una red compartida como un único pasajero. Autenticación/recuperación conserva un límite más estricto por IP. Estos umbrales deben ajustarse con evidencia de carga y monitorización del operador.
 
-```cron
-* * * * * cd /ruta/foxbus/backend && /usr/bin/node --env-file-if-exists=.env src/jobs/expire-reservations.js >> /var/log/foxbus-expiration.log 2>&1
-```
+## Pagos y conciliación
 
-En Windows puede ejecutarse el mismo comando con el Programador de tareas. El job y la API usan `BEGIN IMMEDIATE`, WAL e índices de vencimiento; la limpieza es idempotente y puede compartir la base con el servidor. Configurar un supervisor de procesos, volumen persistente y una ruta absoluta de base si el despliegue usa diferentes directorios de trabajo. GitHub Actions valida pruebas; no actúa como cron de una base remota.
+El botón de pago demo está rotulado, no cobra dinero y no está disponible en producción. Caja admite exclusivamente efectivo declarado y verificado por Finanzas; los pagos bancarios requieren el adaptador del proveedor.
 
-## Acceso
+Contrato del adaptador confiable: POST /api/internal/payments, Content-Type application/json; cuerpo con code, reference, amountCents y occurredAt (ISO UTC del pago capturado). Los headers X-Payment-Timestamp (milisegundos UTC recientes) y X-Payment-Signature autentican la notificación. Firma hexadecimal HMAC-SHA256 de timestamp + punto + cuerpo JSON exacto, con PAYMENT_WEBHOOK_SECRET. El adaptador debe verificar primero la firma y el estado del proveedor bancario. Este contrato no es una integración directa con un banco específico.
 
-Las rutas de reservas requieren `X-Booking-Client`, una credencial aleatoria de 32 bytes generada por el navegador; la base guarda su SHA-256 y las consultas siempre restringen por propietario. No es el token ficticio del login del prototipo. Las reservas corresponden a este navegador, no se sincronizan entre dispositivos ni con cuentas de usuario todavía. No compartir la credencial. El despliegue debe usar HTTPS y vincular este mecanismo al sistema de autenticación real cuando se incorpore.
+Cada evento se conserva y su referencia es única. Un aviso tardío de pago puntual:
+- Emite el boleto si el asiento sigue libre y el abordaje permite recuperarlo.
+- Abre devolución pendiente si el asiento se reasignó o el viaje no permite recuperarlo.
+- No vende dos veces el mismo asiento.
 
-La API permite únicamente el origen exacto de `FRONTEND_ORIGIN`. El frontend usa `VITE_API_URL` si está definida, o `http://localhost:8080/api`.
+Importes diferentes se revisan; un segundo cobro o pago fuera de plazo se registra para devolución. Una aprobación de devolución libera asientos, pero no afirma que se transfirió dinero. Finanzas debe registrar un comprobante único e importe validado del reintegro efectivamente realizado. Las transacciones bancarias, comprobantes fiscales y liquidación con el operador requieren sus proveedores.
 
-## Registro de pago
+## Notificaciones, boletos y posventa
 
-Por defecto, la API **no permite pagos demo**. `DEMO_PAYMENTS=true` en el ejemplo permite probar el flujo con un botón “Simular pago (sin cobro)”; en `NODE_ENV=production` el servidor lo desactiva. No procesa tarjetas, Yape ni Plin.
+Las notificaciones se guardan en outbox antes del envío, con reintentos, bloqueo de trabajo e Idempotency-Key. Configurar MAIL_WEBHOOK_URL (HTTPS) y MAIL_API_KEY para un adaptador de correo. Este debe aceptar id, to, subject y text, respetar idempotencia y confirmar aceptación. Sin configuración, los correos permanecen pendientes y no se presentan como enviados.
 
-Un adaptador de pago confiable puede usar:
+DEV_MAILBOX=true permite leer únicamente las notificaciones de la sesión actual en desarrollo. Nunca activar en producción.
 
-```http
-POST /api/internal/payments
-Authorization: Bearer <PAYMENT_WEBHOOK_SECRET configurado solo en el servidor>
-Content-Type: application/json
+Los boletos se generan únicamente para reservas pagadas, con un QR por viajero, terminal, presentación y documento. El servidor valida el QR y rechaza reutilización, cancelación o abordaje fuera de la ventana. El lector de cámara requiere HTTPS y BarcodeDetector; siempre se admite lector físico o captura del código.
 
-{"code":"FB-...","reference":"referencia-unica-del-proveedor","amountCents":8500}
-```
+Las solicitudes de cambio, devolución, retraso, reclamo y privacidad tienen identificador, estado y respuesta. Una reprogramación aprobada mueve asientos y conserva el boleto; una tarifa o ruta diferente exige cotización y conciliación separadas. El cambio de bus requiere remapeo completo sin colisiones y notifica a compradores. No se puede asignar un vehículo a salidas superpuestas; se reserva margen de preparación de 30 minutos.
 
-El adaptador debe verificar el comprobante/firma del proveedor antes de llamar esta ruta; no es un webhook bancario integrado. La API verifica secreto, importe y plazo dentro de la transacción. Una referencia repetida es idempotente y no se puede usar para otra reserva. Un pago que llega después de las 2 horas no reactiva la reserva. Nunca exponer el secreto con variables `VITE_*` ni en Git.
+## Producción y respaldo
 
-## Pruebas
+Ver ../docs/PRODUCTION_READINESS.md. Docker/Compose incluye volumen persistente, reinicio y frontend con proxy de la API. Terminar TLS antes de exponer el servicio y configurar PUBLIC_URL y FRONTEND_ORIGIN con el origen HTTPS real. El backend no publica su puerto. TRUST_PROXY solo se habilita detrás de un proxy controlado.
 
-```bash
-npm test
-```
+Las ventas en producción permanecen bloqueadas hasta completar identidad/políticas del operador, correo y secreto del adaptador de pagos. El operador debe verificar contratos, soporte, obligaciones legales y configuración efectiva de esos proveedores.
 
-Se verifican tiempos exactos, job sin navegador, persistencia tras reinicio, conflicto de asientos, cancelación, propietario, pago antes/después del límite y endpoints HTTP.
+npm run backup crea una copia consistente y comprueba integrity_check. En producción exige BACKUP_ENCRYPTION_KEY de 32 bytes hexadecimal; cifra con AES-256-GCM y elimina únicamente la copia temporal recién creada. Guardar la clave separada de la copia. La restauración se ensaya en una ubicación nueva y se verifica antes de cualquier sustitución.
 
-Desde `frontend`, `npm run test:e2e` prueba navegador → API → SQLite con un backend aislado y un reloj adelantable. Los 10 minutos y las 2 horas del producto no se modifican. Ver [plan de verificación](../docs/RESERVATION_DEADLINES.md).
+npm run doctor muestra configuración y salud sin revelar secretos. npm run retention:report emite un informe y no elimina datos. El plazo de conservación y las obligaciones legales requieren aprobación del operador.
+
+## Verificación
+
+npm test: lógica, HTTP, permisos, recuperaciones, pagos tardíos, QR, cambios, outbox y reinicios.
+npm run load:check: 40 compras simultáneas en una base aislada.
+Desde frontend: lint, pruebas, build y npm run test:e2e (instalar Chromium con Playwright).
+
+La auditoría npm pasó sin avisos en frontend y backend al preparar esta versión. No equivale a una auditoría independiente de seguridad ni a validación comercial.

@@ -7,39 +7,51 @@
 // lateral que se desliza desde el LADO DERECHO
 // con las opciones del pasajero y su cuenta.
 // ============================================
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { User, LogOut, Menu, X, LayoutDashboard, Home, Search, Ticket } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuthStore } from '../../store/useAuthStore';
-import { ROUTES } from '../../utils/constants';
-import FOXLogo from '../../assets/FOX.png';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  User,
+  LogOut,
+  Menu,
+  X,
+  LayoutDashboard,
+  Home,
+  Search,
+  Ticket,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuthStore } from "../../store/useAuthStore";
+import { ROUTES } from "../../utils/constants";
+import FOXLogo from "../../assets/FOX.png";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { isAuthenticated, isAdmin, user, logout } = useAuthStore();
-  const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate(ROUTES.HOME);
+  const handleLogout = async () => {
+    await logout();
+    window.location.assign(ROUTES.HOME);
   };
 
   const closeMenu = () => setMenuOpen(false);
 
   // Opciones a las que el pasajero tiene acceso.
   const passengerLinks = [
-    { to: ROUTES.HOME, label: 'Inicio', icon: Home },
-    { to: ROUTES.SEARCH, label: 'Buscar viajes', icon: Search },
-    { to: ROUTES.MY_TRIPS, label: 'Mis viajes', icon: Ticket },
+    { to: ROUTES.HOME, label: "Inicio", icon: Home },
+    { to: ROUTES.SEARCH, label: "Buscar viajes", icon: Search },
+    { to: ROUTES.MY_TRIPS, label: "Mis viajes", icon: Ticket },
   ];
 
   return (
     <header className="sticky top-0 z-40 bg-white shadow-sm">
       <div className="flex h-16 items-center justify-between px-6 sm:px-8">
         {/* Logo */}
-<Link to={ROUTES.HOME} className="flex items-center gap-2">
-          <img src={FOXLogo} alt="FOXTRIP" className="h-10 w-10 rounded-xl object-contain" />
+        <Link to={ROUTES.HOME} className="flex items-center gap-2">
+          <img
+            src={FOXLogo}
+            alt="FOXTRIP"
+            className="h-10 w-10 rounded-xl object-contain"
+          />
           <span className="font-display text-2xl font-bold text-gray-800">
             FOX<span className="text-fox-pink">TRIP</span>
           </span>
@@ -69,7 +81,7 @@ export default function Header() {
                 </Link>
               )}
               <span className="text-sm font-medium text-gray-700">
-                {user?.name || 'Usuario'}
+                {user?.name || "Usuario"}
               </span>
               <button
                 onClick={handleLogout}
@@ -94,7 +106,7 @@ export default function Header() {
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="text-gray-700 md:hidden"
-          aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
           aria-expanded={menuOpen}
         >
           {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -115,19 +127,23 @@ export default function Header() {
             />
             {/* Panel que se desliza desde el costado derecho */}
             <motion.aside
-              initial={{ x: '100%' }}
+              initial={{ x: "100%" }}
               animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 320 }}
               role="dialog"
               aria-modal="true"
               aria-label="Menú de navegación"
               className="absolute right-0 top-0 flex h-full w-72 max-w-[85vw] flex-col bg-white shadow-2xl"
             >
               {/* Cabecera del panel */}
-<div className="flex items-center justify-between border-b border-gray-100 p-4">
+              <div className="flex items-center justify-between border-b border-gray-100 p-4">
                 <span className="flex items-center gap-2 font-display text-lg font-bold text-gray-800">
-                  <img src={FOXLogo} alt="FOXTRIP" className="h-8 w-8 rounded-lg object-contain" />
+                  <img
+                    src={FOXLogo}
+                    alt="FOXTRIP"
+                    className="h-8 w-8 rounded-lg object-contain"
+                  />
                   FOX<span className="text-fox-pink">TRIP</span>
                 </span>
                 <button
@@ -167,10 +183,10 @@ export default function Header() {
                     <>
                       <div className="px-2 py-3">
                         <p className="text-sm font-medium text-gray-800">
-                          {user?.name || 'Usuario'}
+                          {user?.name || "Usuario"}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {isAdmin ? 'Administrador' : 'Pasajero'}
+                          {isAdmin ? "Administrador" : "Pasajero"}
                         </p>
                       </div>
                       {isAdmin && (

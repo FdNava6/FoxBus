@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/foxbus.sqlite
+      DEMO_PAYMENTS: "false"
+      DEV_MAILBOX: "false"
+      SEED_DEMO_DATA: "false"
+      TRUST_PROXY: "true"
+    volumes:
+      - booking-data:/app/data
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8088:80"
+    depends_on:
+      - backend
+volumes:
+  booking-data:

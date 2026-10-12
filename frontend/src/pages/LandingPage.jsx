@@ -1,92 +1,88 @@
-// ============================================
-// LandingPage.jsx
-// Página de inicio de FOXTRIP. Reúne el Hero con
-// el buscador, las características, las ofertas y
-// la sección promocional de FoxBot.
-// ============================================
-import { ClipboardCheck, CreditCard, Headphones } from 'lucide-react';
-import Hero from '../components/landing/Hero';
-import FeatureCard from '../components/landing/FeatureCard';
-import OfferCard from '../components/landing/OfferCard';
-import FoxBotSection from '../components/landing/FoxBotSection';
-
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { ClipboardCheck, CreditCard, Headphones } from "lucide-react";
+import Hero from "../components/landing/Hero";
+import FeatureCard from "../components/landing/FeatureCard";
+import FoxBotSection from "../components/landing/FoxBotSection";
+import { operationsService } from "../services/operationsService";
 const features = [
   {
-    icon: <ClipboardCheck className="w-6 h-6" />,
-    title: 'Reserva centralizada',
-    description: 'Busca, elige asiento y conserva el seguimiento del pasaje en un mismo flujo.',
+    icon: <ClipboardCheck className="h-6 w-6" />,
+    title: "Reserva con seguimiento",
+    description:
+      "Asientos retenidos, plazos claros y consulta de tus reservas.",
   },
   {
-    icon: <CreditCard className="w-6 h-6" />,
-    title: 'Pagos previstos',
-    description: 'El prototipo muestra tarjeta, Yape y Plin como integraciones futuras.',
+    icon: <CreditCard className="h-6 w-6" />,
+    title: "Pago verificable",
+    description:
+      "El pago requiere un registro validado. Conserva el comprobante hasta recibir tu boleto.",
   },
   {
-    icon: <Headphones className="w-6 h-6" />,
-    title: 'Atención guiada',
-    description: 'FoxBot responde preguntas frecuentes y orienta solicitudes de posventa.',
+    icon: <Headphones className="h-6 w-6" />,
+    title: "Atención con seguimiento",
+    description:
+      "Solicitudes y reclamos con identificador, estado y respuesta del personal.",
   },
 ];
-
-const offers = [
-  { title: 'Lima - Trujillo', route: 'Salidas cada 2 horas', price: 65, oldPrice: 85, discount: 20 },
-  { title: 'Lima - Chiclayo', route: 'Servicio Premium', price: 95, oldPrice: 125, discount: 24 },
-  { title: 'Lima - Piura', route: 'Salidas nocturnas', price: 110, oldPrice: 140, discount: 21 },
-];
-
 export default function LandingPage() {
-  const openBot = () => {
-    // Dispara un evento global para abrir el widget FoxBot
-    window.dispatchEvent(new CustomEvent('open-foxbot'));
-  };
-
-  // El Header, el Footer y el widget FoxBot los coloca
-  // el PublicLayout (ruta anidada) para reutilizarlos
-  // en todas las pantallas públicas.
+  const [routes, setRoutes] = useState([]),
+    [policy, setPolicy] = useState(null);
+  useEffect(() => {
+    operationsService
+      .catalog()
+      .then(setRoutes)
+      .catch(() => {});
+    operationsService
+      .policy()
+      .then(setPolicy)
+      .catch(() => {});
+  }, []);
   return (
     <main>
-      {/* Hero con buscador */}
       <Hero />
-
-        {/* Características */}
-        <section className="container-fox py-16">
-          <div className="text-center mb-12">
-            <h2 className="font-display font-bold text-3xl text-gray-800 mb-2">
-              ¿Qué integra <span className="text-fox-pink">FOXTRIP</span>?
-            </h2>
-            <p className="text-gray-500 max-w-2xl mx-auto">
-              Un recorrido digital continuo para pasajeros y operadores.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {features.map((feature, idx) => (
-              <FeatureCard key={idx} {...feature} />
-            ))}
-          </div>
-        </section>
-
-        {/* Ofertas */}
-        <section className="bg-gray-50 py-16">
-          <div className="container-fox">
-            <div className="text-center mb-12">
-              <h2 className="font-display font-bold text-3xl text-gray-800 mb-2">
-                Tarifas demostrativas
-              </h2>
-              <p className="text-gray-500">
-                Valores referenciales para probar el flujo de reserva.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {offers.map((offer, idx) => (
-                <OfferCard key={idx} offer={offer} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Sección FoxBot */}
-        <FoxBotSection onOpenBot={openBot} />
+      <section className="container-fox py-12">
+        <h2 className="mb-7 text-center text-3xl font-bold">
+          Viaja con información y seguimiento
+        </h2>
+        <div className="grid gap-5 md:grid-cols-3">
+          {features.map((f) => (
+            <FeatureCard key={f.title} {...f} />
+          ))}
+        </div>
+      </section>
+      <section className="container-fox py-10">
+        <h2 className="mb-6 text-2xl font-bold">Rutas programadas</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {routes.map((r) => (
+            <Link
+              key={r.origin + r.destination}
+              className="rounded-xl border bg-white p-6 font-bold text-fox-pink"
+              to={
+                "/resultados?" +
+                new URLSearchParams({
+                  origin: r.origin,
+                  destination: r.destination,
+                })
+              }
+            >
+              {r.origin} → {r.destination}
+            </Link>
+          ))}
+        </div>
+        {!routes.length && <p>No hay rutas publicadas disponibles.</p>}
+        <h2 className="mb-3 mt-8 text-xl font-bold">
+          Promociones publicadas por el operador
+        </h2>
+        {policy?.offers?.length ? (
+          policy.offers.map((o) => <p key={o}>{o}</p>)
+        ) : (
+          <p>No hay promociones publicadas actualmente.</p>
+        )}
+      </section>
+      <FoxBotSection
+        onOpenBot={() => window.dispatchEvent(new CustomEvent("open-foxbot"))}
+      />
     </main>
   );
 }
-

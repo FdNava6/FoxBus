@@ -1,71 +1,67 @@
-// ============================================
-// Footer.jsx
-// Pie de página con información de contacto,
-// enlaces e información del prototipo FOXTRIP.
-// ============================================
-import { Mail, MapPin, Route } from 'lucide-react';
-import FOXLogo from '../../assets/FOX.png';
-
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { operationsService } from "../../services/operationsService";
 export default function Footer() {
+  const [policy, setPolicy] = useState(null),
+    [health, setHealth] = useState(null);
+  useEffect(() => {
+    operationsService
+      .policy()
+      .then(setPolicy)
+      .catch(() => {});
+    operationsService
+      .health()
+      .then(setHealth)
+      .catch(() => {});
+  }, []);
+  const dev = !policy?.taxId || health?.readiness?.demoPayments;
   return (
-    // pb extra en móvil para que la Bottom Nav (fixed) no tape el pie.
-    <footer className="bg-fox-dark text-white mt-auto pb-14 sm:pb-0">
-      <div className="container-fox py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Marca */}
+    <footer className="mt-auto bg-fox-dark pb-14 text-white sm:pb-0">
+      <div className="container-fox py-10">
+        <div className="grid gap-8 md:grid-cols-3">
           <div>
-<div className="flex items-center gap-2 mb-4">
-              <img src={FOXLogo} alt="FOXTRIP" className="h-10 w-10 rounded-xl object-contain" />
-              <span className="font-display font-bold text-xl">
-                FOX<span className="text-fox-pink">TRIP</span>
-              </span>
-            </div>
-            <p className="text-gray-400 text-sm">
-              Prototipo académico para centralizar la reserva, el abordaje y la atención posventa.
+            <p className="mb-4 text-xl font-bold">
+              FOX<span className="text-fox-pink">TRIP</span>
+            </p>
+            <p className="text-sm text-gray-300">
+              {policy?.legalName ||
+                "Proyecto académico para centralizar reserva, abordaje y atención."}
+            </p>
+            {policy?.taxId && (
+              <p className="mt-2 text-sm">RUC: {policy.taxId}</p>
+            )}
+          </div>
+          <div className="space-y-3 text-sm">
+            <h2 className="font-bold">Atención del operador</h2>
+            <p>
+              {policy?.supportEmail ||
+                "Correo de atención pendiente de configurar"}
+            </p>
+            <p>{policy?.supportPhone || "Teléfono pendiente de configurar"}</p>
+            <p>
+              {policy?.address ||
+                "Domicilio del operador pendiente de configurar"}
+            </p>
+            <Link className="block underline" to="/mis-viajes">
+              Solicitudes y reclamos
+            </Link>
+          </div>
+          <div className="space-y-3 text-sm">
+            <h2 className="font-bold">Información y acceso</h2>
+            <Link className="block underline" to="/condiciones">
+              Condiciones y privacidad
+            </Link>
+            <Link className="block underline" to="/recuperar">
+              Recuperar reserva o cuenta
+            </Link>
+            <p className="rounded-xl border border-white/10 p-3">
+              {dev
+                ? "Entorno de desarrollo con datos de muestra; el pago demo no cobra dinero."
+                : "Reservas con seguimiento, boletos por viajero y atención por los canales publicados."}
             </p>
           </div>
-
-          {/* Contacto */}
-          <div>
-            <h4 className="font-display font-semibold mb-4">Contacto</h4>
-            <ul className="space-y-3 text-sm text-gray-400">
-              <li className="flex items-center gap-2">
-                <Route className="w-4 h-4 text-fox-pink" /> Piloto Lima–Trujillo
-              </li>
-              <li className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-fox-pink" /> Canal de contacto por definir
-              </li>
-              <li className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-fox-pink" /> Lima, Perú
-              </li>
-            </ul>
-          </div>
-
-          {/* Enlaces */}
-          <div>
-            <h4 className="font-display font-semibold mb-4">Alcance</h4>
-            <ul className="space-y-3 text-sm text-gray-400">
-              <li>Reservas con control de plazo</li>
-              <li>Boleto QR propuesto</li>
-              <li>Posventa guiada</li>
-              <li>Dashboard operativo</li>
-            </ul>
-          </div>
-
-          {/* Redes */}
-          <div>
-            <h4 className="font-display font-semibold mb-4">Estado</h4>
-            <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-gray-300">
-              Prototipo con reservas persistentes. Horarios de muestra; no realiza cobros bancarios.
-            </p>
-          </div>
-        </div>
-
-        <div className="border-t border-white/10 mt-8 pt-6 text-center text-sm text-gray-500">
-          © 2026 FOXTRIP · Proyecto académico de innovación.
         </div>
       </div>
     </footer>
   );
 }
-

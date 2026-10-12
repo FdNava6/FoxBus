@@ -84,7 +84,9 @@ Iniciar también el [backend](../backend/README.md). `VITE_API_URL` apunta por d
 - Las reservas se guardan en SQLite y los asientos se liberan con el job, incluso con el navegador cerrado.
 - API no disponible: error visible; no se confirma una reserva ficticia.
 
-Las reservas corresponden a este navegador; el login existente aún es demostrativo. Pagos bancarios, panel y posventa mantienen su alcance de prototipo. El botón “Simular pago (sin cobro)” aparece solo si el backend habilita `DEMO_PAYMENTS`.
+Las cuentas usan cookies seguras y permiten acceso desde otros dispositivos; las reservas sin cuenta se recuperan mediante correo. El panel consume datos reales de la base y aplica permisos del servidor. Boletos QR, abordaje y solicitudes tienen seguimiento persistente. Los cobros bancarios y envíos reales necesitan proveedores configurados; “Simular pago (sin cobro)” solo aparece en desarrollo.
+
+El frontend utiliza Tailwind 4. Revisar compatibilidad de navegadores antiguos al seleccionar dispositivos para el piloto. [Preparación y límites](../docs/PRODUCTION_READINESS.md).
 
 ## Verificación
 

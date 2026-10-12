@@ -2,7 +2,7 @@
 
 Prototipo académico de una plataforma web para mejorar la trazabilidad del pasaje en viajes interprovinciales, desde la búsqueda y reserva hasta el abordaje y la atención posventa.
 
-> Estado: **prototipo académico con backend de reservas y SQLite**. Selección, confirmación, cancelación y vencimientos se guardan en la base de datos. Los horarios/precios son de muestra; los cobros bancarios, correos, códigos QR y alertas no representan integraciones productivas todavía.
+> Estado: **prototipo con operación persistente**: reservas, cuentas, salidas, inventario compartido, eventos de pago, boletos QR, abordaje y posventa. Desarrollo usa salidas y pagos de muestra. Para ventas reales se requieren políticas y proveedores del operador, HTTPS y validación del piloto; la aplicación no cobra dinero con el botón demo.
 
 ## Problema abordado
 
@@ -16,9 +16,9 @@ FOXTRIP plantea unificar en una sola experiencia:
 
 - búsqueda de viajes y selección visual de asientos;
 - reserva digital con estado trazable;
-- boleto QR como propuesta de abordaje;
+- boleto QR por viajero y validación de abordaje;
 - atención guiada mediante FoxBot;
-- panel operativo con ocupación, reservas y alertas.
+- panel operativo con inventario, atención y conciliación.
 
 La diferenciación propuesta es la continuidad digital del pasaje durante todo el viaje, no una función aislada.
 
@@ -32,16 +32,19 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 - confirmación sin pago y plazo de 2 horas para pagar o cancelar;
 - consulta de reservas persistentes y liberación automática por vencimiento;
 - pago demo optativo y claramente identificado;
-- FoxBot basado en respuestas predefinidas;
-- dashboard administrativo con datos de muestra.
+- comprador separado de viajeros, mapas por vehículo y calendario explícito;
+- cuentas, recuperación segura y roles del personal comprobados en servidor;
+- boletos QR, registro único de abordaje, solicitudes y devoluciones con seguimiento;
+- FoxBot y portada basados en políticas publicadas;
+- panel operativo con datos de la base, auditoría y estado de jobs.
 
 ### Fuera del alcance actual
 
 - cobros bancarios reales;
 - envío real de correos;
 - backend y base de datos productivos;
-- escáneres físicos y validación real de QR;
-- devoluciones o compensaciones automáticas;
+- integración/compra de lectores y validación de documentos por el personal;
+- transferencias de devolución y compensaciones automáticas;
 - inteligencia artificial predictiva;
 - despliegue nacional.
 
@@ -53,27 +56,28 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 | Resultados y asientos | API con duración, inventario por fecha y retenciones en SQLite |
 | Checkout | Confirmación persistente y plazo de pago; no procesa cobros bancarios |
 | Mis viajes | Estados, límite de pago, cancelación y pago demo optativo |
-| FoxBot | Respuestas locales por palabras clave |
-| Dashboard | Demostración visual con datos estáticos |
+| FoxBot | Información del operador sin ofertas ni franquicias inventadas |
+| Panel operativo | Reservas, calendario, buses, atención, finanzas, personal y salud |
 | Backend y base de reservas | Implementados, con job de expiración y pruebas |
-| Pagos bancarios y QR | Integraciones propuestas para siguientes iteraciones |
+| QR y abordaje | Boleto por viajero y validación única con documento |
+| Pagos bancarios y correo | Adaptadores preparados; necesitan proveedores y credenciales |
 
 ## Tecnologías
 
 - React 19 y Vite 8
-- Tailwind CSS
+- Tailwind CSS 4
 - React Router
 - Zustand
 - Axios
 - Recharts
 - Framer Motion
-- Node.js >= 22.13 (recomendado 24 LTS), HTTP y SQLite para reservas
+- Node.js 24 LTS, HTTP y SQLite
 
 ## Ejecución local
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -82,6 +86,7 @@ El frontend se abre normalmente en `http://localhost:5173`. Para usar reservas, 
 ```bash
 cd backend
 cp .env.example .env
+npm ci
 npm start
 ```
 
@@ -97,7 +102,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-En `backend`, ejecutar `npm test`. El recorrido E2E usa una base aislada y prueba ambos vencimientos sin esperar 2 horas. [Reglas y plan de verificación](docs/RESERVATION_DEADLINES.md).
+En `backend`, ejecutar `npm ci`, `npm test` y `npm run load:check`. El E2E usa una base aislada, adelanta el reloj y prueba pagos, recuperación, QR y operación. [Reglas](docs/RESERVATION_DEADLINES.md), [producción](docs/PRODUCTION_READINESS.md) y [piloto comercial](docs/PILOTO_Y_MERCADO.md).
 
 ## Documentación del Avance 1
 

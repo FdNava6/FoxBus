@@ -1,184 +1,679 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { BookingStore, ownerHash, SESSION_DURATION_MS, PAYMENT_DURATION_MS } from '../src/booking-store.js';
-import { startExpirationJob } from '../src/jobs/expire-reservations.js';
-
-const alice = ownerHash('a'.repeat(64));
-const bob = ownerHash('b'.repeat(64));
-const passenger = { name: 'Ana Prueba', dni: '12345678', phone: '999999999', email: 'ana@example.test' };
-function setup(t, path) {
-  let now = Date.parse('2026-10-20T12:00:00Z');
-  const store = new BookingStore(path, { clock: () => now });
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { OperationsStore } from "../src/operations-store.js";
+import {
+  ownerHash,
+  SESSION_DURATION_MS,
+  PAYMENT_DURATION_MS,
+} from "../src/booking-store.js";
+import { AuthStore } from "../src/auth.js";
+import { startExpirationJob } from "../src/jobs/expire-reservations.js";
+import { deliverNotifications } from "../src/jobs/notifications.js";
+const alice = ownerHash("a".repeat(64)),
+  bob = ownerHash("b".repeat(64));
+const buyer = {
+  name: "Ana Prueba",
+  phone: "999999999",
+  email: "ana@example.test",
+};
+const actor = { id: "staff-test", role: "admin" };
+function setup(t, path = ":memory:") {
+  let now = Date.parse("2026-10-20T12:00:00Z");
+  const store = new OperationsStore(path, { clock: () => now });
+  store.seedDemoSchedule("2026-10-20", 5);
+  store.db
+    .prepare(
+      "INSERT OR IGNORE INTO users(id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+    )
+    .run(
+      actor.id,
+      "Staff",
+      "staff@example.test",
+      "invalid",
+      "admin",
+      new Date(now).toISOString(),
+    );
   t.after(() => store.close());
-  return { store, advance: (ms) => { now += ms; }, start: (owner = alice, date = '2026-10-21', tripId = 1, requestKey = randomUUID()) =>
-    store.startSession(owner, { tripId, date, requestKey }) };
+  const start = (
+    owner = alice,
+    count = 1,
+    date = "2026-10-21",
+    tripId = 1,
+    key = randomUUID(),
+  ) =>
+    store.startSession(owner, {
+      tripId,
+      date,
+      requestKey: key,
+      passengers: count,
+    });
+  const data = (seats = ["1A"]) => ({
+    contact: buyer,
+    travelers: seats.map((seat, i) => ({
+      seat,
+      name: "Viajero " + i,
+      documentType: "DNI",
+      documentNumber: String(12345678 + i),
+      birthDate: "1990-01-01",
+    })),
+    acceptTerms: true,
+    policyVersion: store.policy().version,
+  });
+  const pending = (owner = alice, seats = ["1A"]) => {
+    const r = start(owner, seats.length);
+    store.selectSeats(r.code, owner, seats);
+    return store.confirm(r.code, owner, data(seats));
+  };
+  return {
+    store,
+    start,
+    data,
+    pending,
+    advance: (ms) => {
+      now += ms;
+    },
+    setTime: (ms) => {
+      now = ms;
+    },
+  };
 }
 const expectCode = (fn, code) => assert.throws(fn, (e) => e.code === code);
-
-test('10 minutos exactos; reintentar, seleccionar y consultar no extiende la sesión', (t) => {
-  const { store, start, advance } = setup(t);
-  const key = randomUUID();
-  const session = start(alice, '2026-10-21', 1, key);
-  assert.equal(Date.parse(session.session_expires_at) - Date.parse(session.server_now), SESSION_DURATION_MS);
-  store.selectSeats(session.code, alice, ['1A']);
-  advance(9 * 60 * 1000);
-  assert.equal(start(alice, '2026-10-21', 1, key).session_expires_at, session.session_expires_at);
-  assert.equal(store.getReservation(session.code, alice).session_expires_at, session.session_expires_at);
-  advance(60 * 1000);
-  expectCode(() => store.confirm(session.code, alice, passenger), 'RESERVATION_EXPIRED');
-  assert.equal(store.getReservation(session.code, alice).status, 'expired');
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), []);
-  assert.equal(start(alice, '2026-10-21', 1, key).status, 'expired');
+test("ruta y tarifa requieren publicación; bloquea asientos dañados y solapamiento de bus", (t) => {
+  const { store, start } = setup(t);
+  const create = (priceCents = 12500) =>
+    store.createRoute(
+      {
+        origin: " Trujillo ",
+        destination: " Chiclayo ",
+        service: " Ejecutivo ",
+        durationMinutes: 180,
+        priceCents,
+      },
+      actor,
+    );
+  expectCode(
+    () =>
+      store.createRoute(
+        {
+          origin: "  ",
+          destination: "Lima",
+          service: "Normal",
+          durationMinutes: 60,
+          priceCents: 5000,
+        },
+        actor,
+      ),
+    "INVALID_ROUTE",
+  );
+  const route = create();
+  assert.equal(
+    store.routes().find((r) => r.id === route.id).origin,
+    "Trujillo",
+  );
+  expectCode(
+    () => start(alice, 1, "2026-10-21", route.id),
+    "DEPARTURE_NOT_FOUND",
+  );
+  store.saveVehicle(
+    {
+      id: "bus-real-test",
+      label: "Bus de prueba",
+      seats: [
+        { id: "1A", floor: 1, row: 1, col: 1, blocked: true },
+        { id: "1B", floor: 1, row: 1, col: 2 },
+      ],
+    },
+    actor,
+  );
+  const departure = {
+    tripId: route.id,
+    date: "2026-10-21",
+    vehicleId: "bus-real-test",
+    departureAt: "2026-10-21T11:00:00Z",
+    terminalOrigin: "Terminal Trujillo",
+    terminalDestination: "Terminal Chiclayo",
+  };
+  store.createDeparture(departure, actor);
+  const reservation = start(alice, 1, "2026-10-21", route.id);
+  expectCode(
+    () => store.selectSeats(reservation.code, alice, ["1A"]),
+    "INVALID_SEATS",
+  );
+  store.selectSeats(reservation.code, alice, ["1B"]);
+  assert.equal(store.getReservation(reservation.code, alice).price, 125);
+  const revised = create(13000);
+  expectCode(
+    () => store.createDeparture({ ...departure, tripId: revised.id }, actor),
+    "VEHICLE_SCHEDULE_CONFLICT",
+  );
+  assert.equal(store.getReservation(reservation.code, alice).price, 125);
 });
-
-test('la confirmación inicia 2 horas nuevas y no convierte la reserva en pagada', (t) => {
-  const { store, start, advance } = setup(t);
-  const session = start();
-  store.selectSeats(session.code, alice, ['1A']);
+test("10 minutos exactos, recarga y selección no extienden la sesión", (t) => {
+  const { store, start, advance, data } = setup(t),
+    key = randomUUID(),
+    r = start(alice, 1, "2026-10-21", 1, key);
+  store.selectSeats(r.code, alice, ["1A"]);
   advance(SESSION_DURATION_MS - 1);
-  const pending = store.confirm(session.code, alice, { ...passenger, paid: true, payment_deadline_at: '2099-01-01' });
-  assert.equal(pending.status, 'pending_payment');
-  assert.equal(pending.paid_at, null);
-  assert.equal(Date.parse(pending.payment_deadline_at) - Date.parse(pending.confirmed_at), PAYMENT_DURATION_MS);
+  assert.equal(
+    start(alice, 1, "2026-10-21", 1, key).session_expires_at,
+    r.session_expires_at,
+  );
   advance(1);
-  assert.equal(store.getReservation(session.code, alice).status, 'pending_payment');
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), ['1A']);
-  assert.equal(store.confirm(session.code, alice, passenger).payment_deadline_at, pending.payment_deadline_at);
+  expectCode(() => store.confirm(r.code, alice, data()), "RESERVATION_EXPIRED");
+  assert.equal(store.getReservation(r.code, alice).status, "expired");
+  assert.deepEqual(store.getSeats(1, r.date), []);
 });
-
-test('job cancela y libera exactamente al vencer 2 horas sin pago; es idempotente', (t) => {
-  const { store, start, advance } = setup(t);
-  const session = start();
-  store.selectSeats(session.code, alice, ['1A', '1B']);
-  store.confirm(session.code, alice, passenger);
-  advance(PAYMENT_DURATION_MS - 1);
-  assert.equal(store.expireReservations().cancelledUnpaid, 0);
+test("confirmación fija 2 horas nuevas; repetición no extiende y no paga", (t) => {
+  const { store, start, advance, data } = setup(t),
+    r = start();
+  store.selectSeats(r.code, alice, ["1A"]);
+  advance(SESSION_DURATION_MS - 1);
+  const p = store.confirm(r.code, alice, { ...data(), paid: true });
+  assert.equal(
+    Date.parse(p.payment_deadline_at) - Date.parse(p.confirmed_at),
+    PAYMENT_DURATION_MS,
+  );
+  assert.equal(p.paid_at, null);
   advance(1);
-  assert.equal(store.expireReservations().cancelledUnpaid, 1);
-  assert.deepEqual(store.expireReservations(), { expiredSessions: 0, cancelledUnpaid: 0 });
-  const cancelled = store.getReservation(session.code, alice);
-  assert.equal(cancelled.cancellation_reason, 'payment_timeout');
-  assert.deepEqual(cancelled.seats, ['1A', '1B']); // Historial conservado.
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), []);
-  expectCode(() => store.recordPayment(session.code, { reference: 'provider-001', amountCents: 17000 }), 'RESERVATION_EXPIRED');
+  assert.equal(
+    store.confirm(r.code, alice, data()).payment_deadline_at,
+    p.payment_deadline_at,
+  );
 });
-
-test('un pago registrado justo antes del límite conserva asientos después de 2 horas', (t) => {
-  const { store, start, advance } = setup(t);
-  const session = start();
-  store.selectSeats(session.code, alice, ['2A']);
-  store.confirm(session.code, alice, passenger);
+test("vencimiento de pago libera asientos y conserva historial", (t) => {
+  const { store, pending, advance } = setup(t),
+    r = pending();
   advance(PAYMENT_DURATION_MS - 1);
-  assert.equal(store.recordPayment(session.code, { reference: 'provider-002', amountCents: 8500 }).status, 'paid');
+  assert.equal(store.runExpiration().cancelledUnpaid, 0);
+  advance(1);
+  assert.equal(store.runExpiration().cancelledUnpaid, 1);
+  assert.equal(store.runExpiration().cancelledUnpaid, 0);
+  assert.deepEqual(store.getSeats(1, r.date), []);
+  assert.deepEqual(store.getReservation(r.code, alice).seats, ["1A"]);
+});
+test("pago válido y duplicación del mismo evento son idempotentes; no se libera el asiento vendido", (t) => {
+  const { store, pending, advance } = setup(t),
+    r = pending();
+  advance(PAYMENT_DURATION_MS - 1);
+  const paid = store.recordPayment(r.code, {
+    reference: "provider-001",
+    amountCents: 8500,
+  });
+  assert.equal(paid.status, "paid");
+  assert.equal(store.ticketsFor(r.code, alice).length, 1);
   advance(100000);
-  assert.deepEqual(store.expireReservations(), { expiredSessions: 0, cancelledUnpaid: 0 });
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), ['2A']);
-  assert.equal(store.recordPayment(session.code, { reference: 'provider-002', amountCents: 8500 }).status, 'paid');
-  expectCode(() => store.cancel(session.code, alice), 'ALREADY_PAID');
+  store.runExpiration();
+  assert.deepEqual(store.getSeats(1, r.date), ["1A"]);
+  assert.equal(
+    store.recordPayment(r.code, {
+      reference: "provider-001",
+      amountCents: 8500,
+    }).paymentOutcome,
+    "applied",
+  );
+  expectCode(() => store.cancel(r.code, alice), "ALREADY_PAID");
 });
-
-test('rechaza pago incorrecto, duplicado y pago posterior al plazo sin reactivar asientos', (t) => {
-  const { store, start, advance } = setup(t);
-  const first = start();
-  store.selectSeats(first.code, alice, ['2A']);
-  store.confirm(first.code, alice, passenger);
-  expectCode(() => store.recordPayment(first.code, { reference: 'provider-003', amountCents: 1 }), 'PAYMENT_AMOUNT_MISMATCH');
-  store.recordPayment(first.code, { reference: 'provider-003', amountCents: 8500 });
-  const second = start();
-  store.selectSeats(second.code, alice, ['2B']);
-  store.confirm(second.code, alice, passenger);
-  expectCode(() => store.recordPayment(second.code, { reference: 'provider-003', amountCents: 8500 }), 'PAYMENT_REFERENCE_REUSED');
+test("pago puntual con aviso tardío recupera asiento libre y emite boleto", (t) => {
+  const { store, pending, advance } = setup(t),
+    r = pending();
+  advance(PAYMENT_DURATION_MS + 30000);
+  store.runExpiration();
+  const result = store.recordPayment(r.code, {
+    reference: "provider-late-01",
+    amountCents: 8500,
+    occurredAt: new Date(
+      Date.parse(r.payment_deadline_at) - 1000,
+    ).toISOString(),
+  });
+  assert.equal(result.status, "paid");
+  assert.deepEqual(store.getSeats(1, r.date), ["1A"]);
+});
+test("aviso tardío con asiento revendido abre devolución sin doble asignación", (t) => {
+  const { store, pending, advance, start } = setup(t),
+    r = pending();
   advance(PAYMENT_DURATION_MS);
-  expectCode(() => store.recordPayment(second.code, { reference: 'provider-004', amountCents: 8500 }), 'RESERVATION_EXPIRED');
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), ['2A']);
-});
-
-test('dos pasajeros no pueden retener el mismo asiento; una selección fallida conserva la anterior', (t) => {
-  const { store, start } = setup(t);
-  const first = start();
+  store.runExpiration();
   const second = start(bob);
-  store.selectSeats(first.code, alice, ['1A']);
-  store.selectSeats(second.code, bob, ['1B']);
-  expectCode(() => store.selectSeats(second.code, bob, ['1B', '1A']), 'SEAT_UNAVAILABLE');
-  assert.deepEqual(store.getReservation(second.code, bob).seats, ['1B']);
-  store.selectSeats(first.code, alice, []);
-  assert.deepEqual(store.selectSeats(second.code, bob, ['1A', '1B']).seats, ['1A', '1B']);
+  store.selectSeats(second.code, bob, ["1A"]);
+  const result = store.recordPayment(r.code, {
+    reference: "provider-late-02",
+    amountCents: 8500,
+    occurredAt: new Date(
+      Date.parse(r.payment_deadline_at) - 1000,
+    ).toISOString(),
+  });
+  assert.equal(result.status, "cancelled");
+  assert.equal(result.paymentOutcome, "refund_pending");
+  assert.equal(result.financialCases[0].reason, "seat_reassigned");
+  assert.deepEqual(store.getReservation(second.code, bob).seats, ["1A"]);
 });
-
-test('cancelación voluntaria libera asientos; distinta fecha o bus tiene inventario propio', (t) => {
+test("pago fuera de plazo y segundo cobro se registran para devolver; importe erróneo para revisar", (t) => {
+  const { store, pending, advance } = setup(t),
+    r = pending();
+  advance(PAYMENT_DURATION_MS);
+  assert.equal(
+    store.recordPayment(r.code, {
+      reference: "provider-outside",
+      amountCents: 8500,
+    }).paymentOutcome,
+    "refund_pending",
+  );
+  const p = pending(bob, ["1B"]);
+  assert.equal(
+    store.recordPayment(p.code, {
+      reference: "provider-wrong-01",
+      amountCents: 1,
+    }).paymentOutcome,
+    "review",
+  );
+  store.recordPayment(p.code, {
+    reference: "provider-correct",
+    amountCents: 8500,
+  });
+  assert.equal(
+    store.recordPayment(p.code, {
+      reference: "provider-double-01",
+      amountCents: 8500,
+    }).paymentOutcome,
+    "refund_pending",
+  );
+  expectCode(
+    () =>
+      store.recordPayment(r.code, {
+        reference: "provider-double-01",
+        amountCents: 8500,
+      }),
+    "PAYMENT_REFERENCE_REUSED",
+  );
+});
+test("no se inventan salidas ni se venden fechas pasadas o salidas cerradas", (t) => {
+  const { store, start, setTime } = setup(t);
+  expectCode(
+    () =>
+      store.searchTrips({
+        origin: "Lima",
+        destination: "Trujillo",
+        date: "2020-01-01",
+      }),
+    "PAST_DATE",
+  );
+  expectCode(() => start(alice, 1, "2020-01-01"), "DEPARTURE_NOT_FOUND");
+  expectCode(() => start(alice, 1, "2026-11-30"), "DEPARTURE_NOT_FOUND");
+  assert.deepEqual(
+    store.searchTrips({
+      origin: "Lima",
+      destination: "Piura",
+      date: "2026-10-21",
+    }),
+    [],
+  );
+  const dep = store.departure(1, "2026-10-21");
+  setTime(store.salesClose(dep));
+  expectCode(() => start(), "SALES_CLOSED");
+  assert.equal(
+    store
+      .searchTrips({
+        origin: "Lima",
+        destination: "Trujillo",
+        date: "2026-10-21",
+      })
+      .some((t) => t.id === 1),
+    false,
+  );
+});
+test("duración y llegada nocturna son del calendario programado", (t) => {
+  const { store } = setup(t),
+    r = store.getTrip(4, "2026-10-21");
+  assert.equal(r.durationMinutes, 540);
+  assert.equal(r.arrivalTime, "07:00");
+  assert.equal(r.arrivalDayOffset, 1);
+  assert.ok(r.terminalOrigin);
+});
+test("un viajero por asiento; admite DNI, CE, pasaporte y valida responsable de menor", (t) => {
+  const { store, start, data } = setup(t),
+    r = start(alice, 2);
+  store.selectSeats(r.code, alice, ["1A", "1B"]);
+  expectCode(
+    () => store.confirm(r.code, alice, data(["1A"])),
+    "PASSENGERS_REQUIRED",
+  );
+  const payload = data(["1A", "1B"]);
+  payload.travelers[1] = {
+    ...payload.travelers[1],
+    documentType: "PASSPORT",
+    documentNumber: "AB123456",
+    birthDate: "2015-01-01",
+  };
+  expectCode(() => store.confirm(r.code, alice, payload), "GUARDIAN_REQUIRED");
+  payload.travelers[1].guardian = "Ana Prueba";
+  const result = store.confirm(r.code, alice, payload);
+  assert.equal(result.travelers.length, 2);
+  assert.equal(result.travelers[1].documentType, "PASSPORT");
+});
+test("limita pasajeros y reservas activas; no puede retener 40 asientos", (t) => {
   const { store, start } = setup(t);
-  const first = start();
-  const nextDate = start(bob, '2026-10-22');
-  const nextBus = start(bob, '2026-10-21', 2);
-  for (const [session, owner] of [[first, alice], [nextDate, bob], [nextBus, bob]]) store.selectSeats(session.code, owner, ['3A']);
-  store.confirm(first.code, alice, passenger);
-  store.cancel(first.code, alice);
-  assert.equal(store.cancel(first.code, alice).status, 'cancelled');
-  assert.deepEqual(store.getSeats(1, '2026-10-21'), []);
-  assert.deepEqual(store.getSeats(1, '2026-10-22'), ['3A']);
-  assert.deepEqual(store.getSeats(2, '2026-10-21'), ['3A']);
+  expectCode(() => start(alice, 40), "INVALID_PASSENGERS");
+  const r = start();
+  expectCode(
+    () => store.selectSeats(r.code, alice, ["1A", "1B"]),
+    "INVALID_SEATS",
+  );
+  start();
+  start();
+  expectCode(() => start(), "RESERVATION_LIMIT");
+  store.cancel(r.code, alice);
+  assert.equal(start().status, "active_session");
 });
-
-test('reservas aisladas por propietario, DNI y asientos validados, precio calculado en servidor', (t) => {
-  const { store, start } = setup(t);
-  const session = start();
-  expectCode(() => store.getReservation(session.code, bob), 'RESERVATION_NOT_FOUND');
-  expectCode(() => store.selectSeats(session.code, bob, ['1A']), 'RESERVATION_NOT_FOUND');
-  expectCode(() => store.cancel(session.code, bob), 'RESERVATION_NOT_FOUND');
-  expectCode(() => store.confirm(session.code, alice, passenger), 'SEATS_REQUIRED');
-  expectCode(() => store.selectSeats(session.code, alice, ['12A']), 'INVALID_SEATS');
-  expectCode(() => store.selectSeats(session.code, alice, ['1A', '1A']), 'INVALID_SEATS');
-  assert.equal(store.selectSeats(session.code, alice, ['1A', '1B']).price, 170);
-  expectCode(() => store.confirm(session.code, alice, { ...passenger, dni: '123' }), 'INVALID_PASSENGER');
-  assert.deepEqual(store.getMine(bob), []);
+test("web y caja usan el mismo inventario; fallo conserva selección previa", (t) => {
+  const { store, start } = setup(t),
+    a = start(),
+    b = store.startSession(
+      bob,
+      {
+        tripId: 1,
+        date: "2026-10-21",
+        passengers: 2,
+        requestKey: randomUUID(),
+      },
+      actor,
+      "counter",
+    );
+  store.selectSeats(a.code, alice, ["1A"]);
+  store.selectSeats(b.code, bob, ["1B"]);
+  expectCode(
+    () => store.selectSeats(b.code, bob, ["1A", "1B"]),
+    "SEAT_UNAVAILABLE",
+  );
+  assert.deepEqual(store.getReservation(b.code, bob).seats, ["1B"]);
+  store.cancel(a.code, alice);
+  assert.deepEqual(store.selectSeats(b.code, bob, ["1A", "1B"]).seats, [
+    "1A",
+    "1B",
+  ]);
 });
-
-test('búsqueda informa duración y llegada al día siguiente; vacíos no generan viajes ficticios', (t) => {
-  const { store, start } = setup(t);
-  assert.deepEqual(store.searchTrips({ origin: 'Lima', destination: 'Piura', date: '2026-10-21' }), []);
-  expectCode(() => store.searchTrips({ date: '2026-02-30' }), 'INVALID_DATE');
-  const night = store.getTrip(4, '2026-10-21');
-  assert.equal(night.durationMinutes, 540);
-  assert.equal(night.arrivalTime, '07:00');
-  assert.equal(night.arrivalDayOffset, 1);
-  const session = start();
-  store.selectSeats(session.code, alice, ['1A', '1B']);
-  assert.equal(store.getTrip(1, '2026-10-21').seatsAvailable, 38);
+test("inventario por fecha y vehículo; cambio remapea viajeros y notifica de forma atómica", (t) => {
+  const { store, pending, start } = setup(t),
+    r = pending();
+  store.recordPayment(r.code, {
+    reference: "vehicle-payment",
+    amountCents: 8500,
+  });
+  const later = start(bob, 1, "2026-10-22");
+  store.selectSeats(later.code, bob, ["1A"]);
+  store.changeDeparture(r.trip.departureId, actor, {
+    vehicleId: "demo-bus-2",
+    seatMap: { "1A": "2A" },
+    message: "Cambio de vehículo por mantenimiento.",
+  });
+  assert.deepEqual(store.getReservation(r.code, alice).seats, ["2A"]);
+  assert.equal(store.getReservation(r.code, alice).travelers[0].seat, "2A");
+  assert.deepEqual(store.getSeats(1, "2026-10-22"), ["1A"]);
+  expectCode(
+    () =>
+      store.changeDeparture(r.trip.departureId, actor, {
+        vehicleId: "demo-bus",
+        seatMap: {},
+        message: "Mapa incompleto de prueba.",
+      }),
+    "INVALID_SEAT_MAPPING",
+  );
+  assert.equal(store.departure(1, r.date).vehicle_id, "demo-bus-2");
 });
-
-test('el job funciona sin peticiones del navegador y recupera vencimientos al arrancar', (t) => {
-  t.mock.timers.enable({ apis: ['setInterval'] });
-  const { store, start, advance } = setup(t);
-  const session = start();
-  store.selectSeats(session.code, alice, ['4A']);
-  advance(SESSION_DURATION_MS);
+test("QR solo para pagados y registro de abordaje único durante su ventana", (t) => {
+  const { store, pending, setTime } = setup(t),
+    r = pending();
+  expectCode(() => store.ticketsFor(r.code, alice), "INVALID_STATE");
+  store.recordPayment(r.code, {
+    reference: "boarding-payment",
+    amountCents: 8500,
+  });
+  const ticket = store.ticketsFor(r.code, alice)[0];
+  expectCode(() => store.checkIn(ticket.qrText, actor), "BOARDING_CLOSED");
+  setTime(Date.parse(r.trip.departure_at) - 30 * 60000);
+  expectCode(
+    () => store.checkIn(ticket.qrText, actor, "WRONG"),
+    "DOCUMENT_MISMATCH",
+  );
+  assert.equal(
+    store.checkIn(ticket.qrText, actor, "12345678").status,
+    "boarded",
+  );
+  expectCode(() => store.checkIn(ticket.qrText, actor), "ALREADY_CHECKED_IN");
+});
+test("recuperación de reserva es un solo uso, no revela existencia y habilita otro navegador", (t) => {
+  const { store, pending } = setup(t),
+    r = pending();
+  assert.equal(
+    store.requestRecovery({ code: r.code, email: "wrong@example.test" })
+      .message,
+    store.requestRecovery({ code: r.code, email: buyer.email }).message,
+  );
+  const mail = store.db
+    .prepare("SELECT body FROM outbox WHERE subject='Recuperar reserva'")
+    .get();
+  const token = new URL(mail.body).searchParams.get("token");
+  assert.equal(store.redeemRecovery(token, bob).code, r.code);
+  assert.equal(store.getMine(bob).length, 1);
+  assert.equal(store.redeemRecovery(token, bob).code, r.code);
+  expectCode(
+    () => store.redeemRecovery(token, ownerHash("c".repeat(64))),
+    "LINK_EXPIRED",
+  );
+});
+test("posventa tiene seguimiento; aprobación de devolución libera inventario pero no inventa transferencia", (t) => {
+  const { store, pending } = setup(t),
+    r = pending();
+  store.recordPayment(r.code, {
+    reference: "refund-payment-01",
+    amountCents: 8500,
+  });
+  const updated = store.requestService(r.code, alice, {
+    kind: "refund",
+    message: "Solicito devolución por cambio de planes.",
+  });
+  const id = updated.serviceRequests[0].id;
+  store.resolveRequest(id, actor, {
+    status: "resolved",
+    response: "Se aprueba la devolución según revisión de atención.",
+  });
+  const current = store.getReservation(r.code, alice);
+  assert.equal(current.status, "cancelled");
+  assert.deepEqual(store.getSeats(1, r.date), []);
+  assert.equal(current.financialCases[0].status, "refund_pending");
+  const caseId = current.financialCases[0].id;
+  expectCode(
+    () =>
+      store.resolveFinancialCase(
+        caseId,
+        {
+          reference: "refund-proof-01",
+          amountCents: 1,
+          response: "Comprobante de devolución validado.",
+        },
+        actor,
+      ),
+    "REFUND_AMOUNT_MISMATCH",
+  );
+  store.resolveFinancialCase(
+    caseId,
+    {
+      reference: "refund-proof-01",
+      amountCents: 8500,
+      response: "Comprobante de devolución validado.",
+    },
+    actor,
+  );
+  assert.equal(
+    store.getReservation(r.code, alice).financialCases[0].status,
+    "resolved",
+  );
+});
+test("reprogramación de igual tarifa mueve inventario y mantiene boleto; tarifa diferente requiere revisión", (t) => {
+  const { store, pending } = setup(t),
+    r = pending();
+  store.recordPayment(r.code, {
+    reference: "reschedule-paid",
+    amountCents: 8500,
+  });
+  const updated = store.requestService(r.code, alice, {
+      kind: "reprogram",
+      message: "Deseo viajar al día siguiente por motivos personales.",
+    }),
+    id = updated.serviceRequests[0].id;
+  store.resolveRequest(id, actor, {
+    status: "resolved",
+    response: "Cambio aprobado para el día siguiente.",
+    targetDepartureId: store.departure(1, "2026-10-22").id,
+    seatMap: { "1A": "2A" },
+  });
+  assert.deepEqual(store.getSeats(1, "2026-10-21"), []);
+  assert.deepEqual(store.getSeats(1, "2026-10-22"), ["2A"]);
+  assert.equal(store.ticketsFor(r.code, alice)[0].seat, "2A");
+});
+test("cancelación del operador abre devolución y anula boleto", (t) => {
+  const { store, pending } = setup(t),
+    r = pending();
+  store.recordPayment(r.code, {
+    reference: "cancel-trip-paid",
+    amountCents: 8500,
+  });
+  store.changeDeparture(r.trip.departureId, actor, {
+    status: "cancelled",
+    message: "Salida cancelada por cierre de carretera.",
+  });
+  assert.equal(
+    store.getReservation(r.code, alice).financialCases[0].status,
+    "refund_pending",
+  );
+  expectCode(() => store.ticketsFor(r.code, alice), "RESERVATION_EXPIRED");
+  assert.deepEqual(store.getSeats(1, r.date), []);
+});
+test("FoxBot no anuncia políticas ni promociones inventadas", (t) => {
+  const { store } = setup(t);
+  assert.match(store.chatbot("equipaje").message, /todavía debe publicar/);
+  assert.match(store.chatbot("oferta").message, /No hay promociones/);
+  store.setPolicy(
+    { baggageKg: 15, offers: ["Oferta publicada por el operador."] },
+    actor,
+  );
+  assert.match(store.chatbot("equipaje").message, /15 kg/);
+  assert.match(store.chatbot("oferta").message, /Oferta publicada/);
+});
+test("job expira sin navegador y conserva la salud de ejecución", (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { store, start, advance } = setup(t),
+    r = start();
+  store.selectSeats(r.code, alice, ["1A"]);
   const stop = startExpirationJob(store, { intervalMs: 1000 });
   t.after(stop);
-  assert.equal(store.db.prepare('SELECT status FROM reservations WHERE code=?').get(session.code).status, 'expired');
-  const another = start();
-  store.selectSeats(another.code, alice, ['4A']);
   advance(SESSION_DURATION_MS);
   t.mock.timers.tick(1000);
-  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM reservation_seats').get().count, 0);
+  assert.equal(
+    store.db.prepare("SELECT status FROM reservations WHERE code=?").get(r.code)
+      .status,
+    "expired",
+  );
+  assert.ok(
+    store.db
+      .prepare("SELECT last_success_at FROM job_health WHERE name='expiration'")
+      .get().last_success_at,
+  );
 });
-
-test('SQLite conserva vencimientos tras cerrar y reabrir el servicio', (t) => {
-  const directory = mkdtempSync(join(tmpdir(), 'foxbus-deadlines-'));
-  const path = join(directory, 'test.sqlite');
-  let now = Date.parse('2026-10-20T12:00:00Z');
-  const first = new BookingStore(path, { clock: () => now });
-  const session = first.startSession(alice, { tripId: 1, date: '2026-10-21', requestKey: randomUUID() });
-  first.selectSeats(session.code, alice, ['5A']);
-  first.confirm(session.code, alice, passenger);
+test("cola de correo reintenta fallos y no envía sin configuración", async (t) => {
+  const { store, pending, advance } = setup(t);
+  pending();
+  assert.equal((await deliverNotifications(store)).configured, false);
+  await deliverNotifications(store, {
+    endpoint: "https://mail.example.test/send",
+    fetchImpl: async () => ({ ok: false, status: 503 }),
+  });
+  assert.equal(
+    store.db.prepare("SELECT status FROM outbox").get().status,
+    "failed",
+  );
+  advance(60000);
+  const calls = [];
+  await deliverNotifications(store, {
+    endpoint: "https://mail.example.test/send",
+    fetchImpl: async (url, opts) => {
+      calls.push(opts.headers["Idempotency-Key"]);
+      return { ok: true };
+    },
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(
+    store.db.prepare("SELECT status FROM outbox").get().status,
+    "delivered",
+  );
+});
+test("SQLite conserva datos y aplica migraciones una sola vez tras reinicio", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "foxbus-ops-")),
+    path = join(dir, "db.sqlite");
+  let now = Date.parse("2026-10-20T12:00:00Z");
+  const first = new OperationsStore(path, { clock: () => now });
+  first.seedDemoSchedule("2026-10-20", 3);
+  const r = first.startSession(alice, {
+    tripId: 1,
+    date: "2026-10-21",
+    passengers: 1,
+    requestKey: randomUUID(),
+  });
+  first.selectSeats(r.code, alice, ["1A"]);
+  first.confirm(r.code, alice, {
+    contact: buyer,
+    travelers: [
+      {
+        seat: "1A",
+        name: "Ana",
+        documentType: "DNI",
+        documentNumber: "12345678",
+        birthDate: "1990-01-01",
+      },
+    ],
+    acceptTerms: true,
+    policyVersion: first.policy().version,
+  });
   first.close();
   now += PAYMENT_DURATION_MS;
-  const reopened = new BookingStore(path, { clock: () => now });
-  t.after(() => { reopened.close(); rmSync(directory, { recursive: true, force: true }); });
-  assert.equal(reopened.expireReservations().cancelledUnpaid, 1);
-  assert.deepEqual(reopened.getSeats(1, '2026-10-21'), []);
-  assert.equal(reopened.getReservation(session.code, alice).status, 'cancelled');
+  const second = new OperationsStore(path, { clock: () => now });
+  t.after(() => {
+    second.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  assert.equal(second.runExpiration().cancelledUnpaid, 1);
+  assert.equal(
+    second.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get().n,
+    2,
+  );
+  assert.deepEqual(second.getSeats(1, "2026-10-21"), []);
+});
+test("autenticación real, revocación, roles, recuperación de contraseña y prohibición de escalamiento", (t) => {
+  const { store } = setup(t),
+    auth = new AuthStore(store);
+  const u = auth.register({
+    name: "Pasajero",
+    email: "user@example.test",
+    password: "a-strong-password-2026",
+    acceptTerms: true,
+    policyVersion: store.policy().version,
+  });
+  assert.equal(auth.login(u.email, "a-strong-password-2026").role, "passenger");
+  expectCode(() => auth.login(u.email, "wrong"), "INVALID_CREDENTIALS");
+  expectCode(() => auth.require(u, ["admin"]), "ROLE_REQUIRED");
+  const token = auth.issue(u);
+  assert.equal(auth.authenticate("foxbus_session=" + token).id, u.id);
+  auth.revoke("foxbus_session=" + token);
+  assert.equal(auth.authenticate("foxbus_session=" + token), null);
+  auth.requestReset(u.email);
+  const mail = store.db
+      .prepare("SELECT body FROM outbox WHERE subject='Recuperación de cuenta'")
+      .get(),
+    reset = new URL(mail.body).searchParams.get("reset");
+  auth.reset(reset, "a-new-strong-password-2026");
+  expectCode(() => auth.reset(reset, "a-third-password-2026"), "LINK_EXPIRED");
+  assert.equal(auth.login(u.email, "a-new-strong-password-2026").id, u.id);
 });

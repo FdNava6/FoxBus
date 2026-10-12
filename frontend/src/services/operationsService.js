@@ -1,0 +1,19 @@
+import api from "./api";
+export const operationsService = {
+  policy: async () => (await api.get("/policies")).data,
+  catalog: async () => (await api.get("/trips/catalog")).data,
+  health: async () => (await api.get("/health")).data,
+  mailbox: async () => (await api.get("/dev/mailbox")).data,
+  recovery: async (data) =>
+    (await api.post("/reservations/recovery", data)).data,
+  redeem: async (token) =>
+    (await api.post("/reservations/recover", { token })).data,
+  tickets: async (code) =>
+    (await api.get("/reservations/" + code + "/tickets")).data,
+  request: async (code, data) =>
+    (await api.post("/reservations/" + code + "/requests", data)).data,
+  staffGet: async (path) => (await api.get("/staff/" + path)).data,
+  staffPost: async (path, data) =>
+    (await api.post("/staff/" + path, data)).data,
+  staffPut: async (path, data) => (await api.put("/staff/" + path, data)).data,
+};

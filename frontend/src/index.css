@@ -7,9 +7,24 @@
      .btn*, .input, .card) y ajustes de
      accesibilidad para móvil
    ============================================ */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@media print {
+  header,
+  footer,
+  nav,
+  button,
+  [data-print-hide] {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  article {
+    break-inside: avoid;
+  }
+}
 
 @layer base {
   html {
@@ -27,12 +42,21 @@
     flex-direction: column;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display;
   }
 
   /* Elementos táctiles: sin recuadro azul al tocar en móvil */
-  button, a, input, select, textarea {
+  button,
+  a,
+  input,
+  select,
+  textarea {
     -webkit-tap-highlight-color: transparent;
   }
 }
@@ -57,15 +81,15 @@
   }
 
   .btn-primary {
-    @apply btn bg-fox-pink text-white hover:bg-fox-pink-dark shadow-fox;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-fox-pink text-white hover:bg-fox-pink-dark shadow-fox;
   }
 
   .btn-outline {
-    @apply btn border-2 border-fox-pink text-fox-pink hover:bg-fox-pink/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed border-2 border-fox-pink text-fox-pink hover:bg-fox-pink/10;
   }
 
   .btn-ghost {
-    @apply btn text-gray-600 hover:bg-gray-100;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 hover:bg-gray-100;
   }
 
   .input {

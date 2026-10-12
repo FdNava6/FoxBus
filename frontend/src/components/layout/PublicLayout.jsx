@@ -12,18 +12,19 @@
 // Así cada página solo define su propio contenido
 // y no repite Header/Footer en cada archivo.
 // ============================================
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Search, Ticket } from 'lucide-react';
-import Header from './Header';
-import Footer from './Footer';
-import FoxBotWidget from '../chatbot/FoxBotWidget';
-import { ROUTES } from '../../utils/constants';
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Home, Search, Ticket } from "lucide-react";
+import Header from "./Header";
+import Footer from "./Footer";
+import FoxBotWidget from "../chatbot/FoxBotWidget";
+import EnvironmentNotice from "../common/EnvironmentNotice";
+import { ROUTES } from "../../utils/constants";
 
 // Elementos visibles en la barra inferior móvil.
 const TABS = [
-  { to: ROUTES.HOME, label: 'Inicio', icon: Home, end: true },
-  { to: ROUTES.SEARCH, label: 'Buscar', icon: Search },
-  { to: ROUTES.MY_TRIPS, label: 'Mis viajes', icon: Ticket },
+  { to: ROUTES.HOME, label: "Inicio", icon: Home, end: true },
+  { to: ROUTES.SEARCH, label: "Buscar", icon: Search },
+  { to: ROUTES.MY_TRIPS, label: "Mis viajes", icon: Ticket },
 ];
 
 export default function PublicLayout() {
@@ -37,6 +38,7 @@ export default function PublicLayout() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
+      <EnvironmentNotice />
 
       {/* Contenido de la ruta actual */}
       <main className="flex-1">
@@ -46,7 +48,9 @@ export default function PublicLayout() {
       <Footer />
 
       {/* Chatbot flotante disponible en todo el flujo público */}
-      <FoxBotWidget />
+      <div data-print-hide>
+        <FoxBotWidget />
+      </div>
 
       {/* Navegación inferior, visible solo en móvil (hidden sm:flex) */}
       {!isAuthPage && (
@@ -62,7 +66,7 @@ export default function PublicLayout() {
                 end={end}
                 className={({ isActive }) =>
                   `flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium transition ${
-                    isActive ? 'text-fox-pink' : 'text-gray-500'
+                    isActive ? "text-fox-pink" : "text-gray-500"
                   }`
                 }
               >

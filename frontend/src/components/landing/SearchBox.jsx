@@ -1,120 +1,126 @@
-// ============================================
-// SearchBox.jsx
-// Buscador de viajes (formulario) de la home.
-// Un estado local reúne origen, destino, fecha y
-// pasajeros; al enviar navega a /resultados con ese
-// estado (query) mediante location.state.
-// ============================================
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapPin, Calendar, Users, Search } from 'lucide-react';
-import { format } from 'date-fns';
-import { ROUTES } from '../../utils/constants';
-
-export default function SearchBox() {
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { operationsService } from "../../services/operationsService";
+import { bookingErrorMessage } from "../../services/reservationService";
+import { limaToday } from "../../utils/bookingTime";
+export default function SearchBox({ initial }) {
   const navigate = useNavigate();
-  const [searchData, setSearchData] = useState({
-    origin: 'Lima',
-    destination: 'Trujillo',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    passengers: 1,
-  });
-
-  const handleSearch = (event) => {
-    event.preventDefault();
-    navigate(ROUTES.SEARCH, { state: searchData });
+  const [routes, setRoutes] = useState([]),
+    [error, setError] = useState("");
+  const [form, setForm] = useState(
+    () =>
+      initial || {
+        origin: "Lima",
+        destination: "Trujillo",
+        date: limaToday(),
+        passengers: 1,
+      },
+  );
+  useEffect(() => {
+    operationsService
+      .catalog()
+      .then(setRoutes)
+      .catch((e) => setError(bookingErrorMessage(e)));
+  }, []);
+  const origins = [...new Set(routes.map((r) => r.origin))],
+    destinations = routes
+      .filter((r) => r.origin === form.origin)
+      .map((r) => r.destination);
+  const submit = (e) => {
+    e.preventDefault();
+    navigate("/resultados?" + new URLSearchParams(form).toString());
   };
-
   return (
-      <form onSubmit={handleSearch} className="bg-white rounded-2xl shadow-fox-lg p-5 md:p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            {/* Origen */}
-            <div className="md:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-                Origen
-            </label>
-            <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <select
-                value={searchData.origin}
-                onChange={(e) => setSearchData({ ...searchData, origin: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
-                >
-                <option>Lima</option>
-                <option>Arequipa</option>
-                <option>Cusco</option>
-                <option>Trujillo</option>
-                </select>
-            </div>
-            </div>
-
-            {/* Destino */}
-            <div className="md:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-                Destino
-            </label>
-            <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <select
-                value={searchData.destination}
-                onChange={(e) => setSearchData({ ...searchData, destination: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
-                >
-                <option>Trujillo</option>
-                <option>Chiclayo</option>
-                <option>Piura</option>
-                <option>Cajamarca</option>
-                </select>
-            </div>
-            </div>
-
-            {/* Fecha */}
-            <div className="md:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-                Fecha de viaje
-            </label>
-            <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                type="date"
-                value={searchData.date}
-                min={format(new Date(), 'yyyy-MM-dd')}
-                onChange={(e) => setSearchData({ ...searchData, date: e.target.value })}
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
-                />
-            </div>
-            </div>
-
-            {/* Pasajeros */}
-            <div className="md:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pasajeros
-            </label>
-            <div className="relative">
-                <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <select
-                value={searchData.passengers}
-                onChange={(e) => setSearchData({ ...searchData, passengers: parseInt(e.target.value) })}
-                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-700 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-fox-pink"
-                >
-                {[1,2,3,4,5,6].map(num => (
-                    <option key={num} value={num}>{num} {num === 1 ? 'Adulto' : 'Adultos'}</option>
-                ))}
-                </select>
-            </div>
-            </div>
-
-            {/* Botón */}
-            <div className="md:col-span-1 flex items-end">
-            <button
-                type="submit"
-                className="w-full bg-fox-pink hover:bg-fox-pink-dark text-white py-3 px-6 rounded-xl font-semibold shadow-fox transition-all duration-300 flex items-center justify-center gap-2"
-            >
-                <Search className="w-5 h-5" />
-                Buscar Viajes
-            </button>
-            </div>
+    <form onSubmit={submit} className="rounded-2xl bg-white p-5 shadow-sm">
+      {error && (
+        <p role="alert" className="mb-3 text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="grid gap-4 md:grid-cols-5">
+        <div>
+          <label htmlFor="origin" className="mb-1 block text-sm">
+            Origen
+          </label>
+          <select
+            id="origin"
+            className="input"
+            value={form.origin}
+            onChange={(e) => {
+              const o = e.target.value;
+              setForm({
+                ...form,
+                origin: o,
+                destination:
+                  routes.find((r) => r.origin === o)?.destination || "",
+              });
+            }}
+          >
+            {(origins.length ? origins : [form.origin]).map((o) => (
+              <option key={o}>{o}</option>
+            ))}
+          </select>
         </div>
-      </form>
+        <div>
+          <label htmlFor="destination" className="mb-1 block text-sm">
+            Destino
+          </label>
+          <select
+            id="destination"
+            className="input"
+            value={form.destination}
+            onChange={(e) => setForm({ ...form, destination: e.target.value })}
+          >
+            {(destinations.length ? destinations : [form.destination]).map(
+              (o) => (
+                <option key={o}>{o}</option>
+              ),
+            )}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="date" className="mb-1 block text-sm">
+            Fecha de viaje
+          </label>
+          <input
+            id="date"
+            className="input"
+            type="date"
+            required
+            min={limaToday()}
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
+        </div>
+        <div>
+          <label htmlFor="passengers" className="mb-1 block text-sm">
+            Pasajeros
+          </label>
+          <select
+            id="passengers"
+            className="input"
+            value={form.passengers}
+            onChange={(e) =>
+              setForm({ ...form, passengers: Number(e.target.value) })
+            }
+          >
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          className="self-end rounded-xl bg-fox-pink px-5 py-3 font-bold text-white"
+          disabled={!routes.length}
+        >
+          Buscar viajes
+        </button>
+      </div>
+      {!routes.length && !error && (
+        <p className="mt-3 text-sm">No hay rutas programadas publicadas.</p>
+      )}
+    </form>
   );
 }

@@ -1,59 +1,41 @@
-// ============================================
-// AdminLayout.jsx
-// Layout del panel de administración.
-// Distintivo: un PANEL DE CONTROL LATERAL (sidebar)
-// donde el administrador ve todas sus opciones.
-//
-// La barra lateral se adapta a la pantalla: ocupa
-// todo el alto de la ventana (h-screen + sticky) y
-// queda siempre visible junto al contenido, sin
-// menús ni paneles que se deslicen.
-// El contenido de cada pantalla (Métricas, Reservas,
-// Pasajeros, Ofertas) se renderiza en <Outlet/> vía
-// las rutas anidadas definidas en App.jsx.
-// ============================================
-import { Outlet } from 'react-router-dom';
-import { Bell, Search } from 'lucide-react';
-import Sidebar from '../admin/Sidebar';
-
+import { useState } from "react";
+import { Outlet } from "react-router-dom";
+import Sidebar from "../admin/Sidebar";
+import { useAuthStore } from "../../store/useAuthStore";
 export default function AdminLayout() {
+  const [open, setOpen] = useState(false),
+    user = useAuthStore((s) => s.user);
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Panel de control lateral: siempre visible y adaptado a la altura */}
-      <Sidebar />
-
-      {/* Columna principal */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Barra superior */}
-        <header className="sticky top-0 z-30 bg-white shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3 sm:px-6">
-            <div>
-              <h2 className="font-display font-semibold text-gray-800">Panel de administración</h2>
-              <p className="text-xs text-gray-500">Vista con datos simulados</p>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="hidden items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 lg:flex">
-                <Search className="w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Búsqueda"
-                  className="bg-transparent text-sm outline-none"
-                />
-              </div>
-              <button
-                className="relative text-gray-400 transition hover:text-gray-600"
-                aria-label="Notificaciones de demostración"
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-fox-pink" />
-              </button>
-            </div>
+      <div className="hidden w-64 shrink-0 md:block">
+        <div className="sticky top-0 h-screen overflow-y-auto">
+          <Sidebar />
+        </div>
+      </div>
+      {open && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <button
+            className="absolute inset-0 bg-black/50"
+            aria-label="Cerrar navegación"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute left-0 top-0 h-full overflow-y-auto">
+            <Sidebar onClose={() => setOpen(false)} />
           </div>
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <header className="sticky top-0 z-30 flex items-center justify-between bg-white p-4 shadow-sm">
+          <button
+            className="text-fox-pink md:hidden"
+            onClick={() => setOpen(true)}
+          >
+            Menú
+          </button>
+          <p className="font-bold">Operación FOXTRIP</p>
+          <p className="text-sm">{user?.role}</p>
         </header>
-
-        {/* Contenido de la pantalla admin actual (Outlet) */}
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

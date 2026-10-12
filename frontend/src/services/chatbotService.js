@@ -1,40 +1,13 @@
-// ============================================
-// chatbotService.js
-// Servicio del chatbot FoxBot.
-// Envía el mensaje del usuario al backend. Si el
-// backend no está disponible, responde con una
-// respuesta local simple para que el demo funcione.
-// ============================================
-import api from './api';
-
-const localReplies = {
-  'pasaje': 'Puedes comprar tu pasaje en la página principal: elige tu origen, destino y fecha, luego selecciona asiento y paga en línea.',
-  'equipaje': 'Cada pasajero puede llevar hasta 20kg de equipaje en bodega y un equipaje de mano. El equipaje extra tiene un costo adicional.',
-  'horario': 'Tenemos salidas cada 2 horas desde las 6:00 a.m. hasta las 11:00 p.m. Consulta los horarios exactos según tu ruta.',
-  'oferta': 'Actualmente tenemos 20% de descuento en rutas al norte del país. Revisa la sección de ofertas para más detalles.',
-  'reprogram': 'En el MVP puedes registrar una solicitud de reprogramación desde Mis viajes. La confirmación automática se implementará con el backend.',
-  'devolu': 'La devolución se presenta como un flujo guiado de demostración. No se realizan movimientos de dinero reales.',
-  'retras': 'Puedes registrar una incidencia por retraso desde Mis viajes. Las compensaciones automáticas están fuera del alcance actual.',
-  'default': 'Esta versión de FoxBot usa respuestas predefinidas. Prueba preguntar por pasajes, equipaje, horarios, ofertas, reprogramaciones, devoluciones o retrasos.',
-};
-
-const getLocalReply = (message) => {
-  const msg = message.toLowerCase();
-  for (const [key, reply] of Object.entries(localReplies)) {
-    if (msg.includes(key)) return reply;
-  }
-  return localReplies.default;
-};
-
+import api from "./api";
 export const chatbotService = {
-  // Envía un mensaje y obtiene la respuesta del bot
   sendMessage: async (message) => {
     try {
-      const response = await api.post('/chatbot/message', { message });
-      return response.data;
+      return (await api.post("/chatbot/message", { message })).data;
     } catch {
-      // Si el backend no responde, usa respuesta local
-      return { message: getLocalReply(message) };
+      return {
+        message:
+          "No se pudo consultar la información del operador. Intenta nuevamente o contacta atención al cliente; no puedo confirmar horarios, equipaje ni ofertas ahora.",
+      };
     }
   },
 };
