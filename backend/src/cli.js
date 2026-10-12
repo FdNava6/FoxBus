@@ -4,6 +4,7 @@ import { resolve, dirname, join } from "node:path";
 import { OperationsStore } from "./operations-store.js";
 import { AuthStore } from "./auth.js";
 import { encryptBackup } from "./backup-crypto.js";
+import { randomUUID } from "node:crypto";
 const command = process.argv[2],
   path = resolve(process.env.DATABASE_PATH || "./data/foxbus.sqlite");
 const store = new OperationsStore(path, {
@@ -34,6 +35,10 @@ try {
       throw new Error(
         "Configura BACKUP_ENCRYPTION_KEY antes de copiar datos productivos.",
       );
+    if (encryptionKey && !/^[a-fA-F0-9]{64}$/.test(encryptionKey))
+      throw new Error(
+        "BACKUP_ENCRYPTION_KEY requiere 32 bytes en hexadecimal.",
+      );
     const folder = resolve(
       process.env.BACKUP_DIR || join(dirname(path), "backups"),
     );
@@ -43,27 +48,35 @@ try {
       folder === resolve(process.env.USERPROFILE || "/")
     )
       throw new Error("Usa un subdirectorio específico para copias.");
-    mkdirSync(folder, { recursive: true });
+    mkdirSync(folder, { recursive: true, mode: 0o700 });
     const target = join(
       folder,
-      "foxbus-" + new Date().toISOString().replace(/[:.]/g, "-") + ".sqlite",
+      "foxbus-" +
+        new Date().toISOString().replace(/[:.]/g, "-") +
+        "-" +
+        randomUUID() +
+        ".sqlite",
     );
-    await backup(store.db, target);
-    const check = new DatabaseSync(target, { readOnly: true });
-    const result = check.prepare("PRAGMA integrity_check").get();
-    check.close();
-    if (Object.values(result)[0] !== "ok")
-      throw new Error("La copia no pasó integrity_check.");
-    if (encryptionKey) {
-      writeFileSync(
-        target + ".enc",
-        encryptBackup(readFileSync(target), encryptionKey),
-        { flag: "wx", mode: 0o600 },
-      );
-      rmSync(target);
-      console.log("Copia cifrada y verificada: " + target + ".enc");
-    } else
-      console.log("Copia verificada de desarrollo (sin cifrar): " + target);
+    try {
+      await backup(store.db, target);
+      const check = new DatabaseSync(target, { readOnly: true });
+      const result = check.prepare("PRAGMA integrity_check").get();
+      check.close();
+      if (Object.values(result)[0] !== "ok")
+        throw new Error("La copia no pasó integrity_check.");
+      if (encryptionKey) {
+        writeFileSync(
+          target + ".enc",
+          encryptBackup(readFileSync(target), encryptionKey),
+          { flag: "wx", mode: 0o600 },
+        );
+        console.log("Copia cifrada y verificada: " + target + ".enc");
+      } else
+        console.log("Copia verificada de desarrollo (sin cifrar): " + target);
+    } finally {
+      // Solo esta copia temporal recién creada; nunca la base activa.
+      if (encryptionKey) rmSync(target, { force: true });
+    }
   } else if (command === "doctor") {
     const policy = store.policy(),
       jobs = store.db.prepare("SELECT * FROM job_health").all();
