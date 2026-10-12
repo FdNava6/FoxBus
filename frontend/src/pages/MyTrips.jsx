@@ -8,7 +8,7 @@
 // reprogramar, solicitar devolución o reportar
 // un retraso.
 // ============================================
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   BadgeDollarSign,
   Bus,
@@ -20,59 +20,50 @@ import {
   Ticket,
 } from 'lucide-react';
 import Loading from '../components/common/Loading';
-import DemoBanner from '../components/common/DemoBanner';
+import PaymentDeadline from '../components/common/PaymentDeadline';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
-import { reservationService } from '../services/reservationService';
+import { bookingErrorMessage, reservationService } from '../services/reservationService';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
-// Reservas de ejemplo para el demo (si no hay backend)
-const mockReservations = [
-  {
-    code: 'BS-82931',
-    route: 'Lima → Trujillo',
-    date: '2026-09-10',
-    seat: '12A',
-    status: 'Confirmado',
-    price: 85,
-  },
-  {
-    code: 'BS-82928',
-    route: 'Lima → Chiclayo',
-    date: '2026-09-12',
-    seat: '08C',
-    status: 'Pendiente',
-    price: 95,
-  },
-];
+const statusLabel = { pending_payment: 'Pago pendiente', paid: 'Pagado', cancelled: 'Cancelada', expired: 'Sesión expirada' };
 
 export default function MyTrips() {
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(null);
   // Reserva sobre la que se abre la ventana de gestión.
   const [selectedReservation, setSelectedReservation] = useState(null);
   // Mensaje de confirmación de la gestión simulada.
   const [requestMessage, setRequestMessage] = useState('');
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const data = await reservationService.getMyReservations();
-        setReservations(data.length ? data : mockReservations);
-      } catch {
-        setReservations(mockReservations);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const refresh = useCallback(async () => {
+    try {
+      setReservations(await reservationService.getMyReservations());
+      setError('');
+    } catch (e) { setError(bookingErrorMessage(e)); }
+    finally { setLoading(false); }
   }, []);
+  useEffect(() => {
+    const first = setTimeout(refresh, 0);
+    const timer = setInterval(refresh, 5000);
+    return () => { clearTimeout(first); clearInterval(timer); };
+  }, [refresh]);
+  const handleAction = async (reservation, action) => {
+    setBusy(reservation.code);
+    try { await action(reservation.code); await refresh(); }
+    catch (e) {
+      setError(bookingErrorMessage(e));
+      // La próxima consulta periódica mostrará un vencimiento ocurrido durante la acción.
+    } finally { setBusy(null); }
+  };
 
   // El Header y el Footer los añade el PublicLayout.
   return (
     <main className="bg-gray-50">
       <div className="container-fox py-10">
-        <DemoBanner className="mb-6" />
+        {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
         <h1 className="mb-2 font-display text-2xl font-bold text-gray-800">
           Mis viajes
         </h1>
@@ -93,39 +84,45 @@ export default function MyTrips() {
                 className="flex flex-col items-center justify-between gap-6 rounded-2xl bg-white p-6 shadow-sm md:flex-row"
               >
                 {/* Detalle del viaje */}
-                <div className="flex items-center gap-6">
-                  <div className="rounded-xl bg-fox-pink/10 p-3 text-fox-pink">
+                <div className="flex w-full min-w-0 items-start gap-4 md:w-auto">
+                  <div className="shrink-0 rounded-xl bg-fox-pink/10 p-3 text-fox-pink">
                     <Bus className="h-8 w-8" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="font-bold text-gray-800">{reservation.route}</span>
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          reservation.status === 'Confirmado'
+                          reservation.status === 'paid'
                             ? 'bg-green-100 text-green-700'
                             : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
-                        {reservation.status}
+                        {statusLabel[reservation.status] || reservation.status}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-gray-500">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
                         {formatDate(reservation.date)}
                       </span>
                       <span className="flex items-center gap-1">
                         <MapPin className="h-4 w-4" />
-                        Asiento {reservation.seat}
+                        Asientos {reservation.seats.join(', ')}
                       </span>
                     </div>
+                    {reservation.status === 'pending_payment' && <PaymentDeadline reservation={reservation} onElapsed={refresh} />}
+                    {reservation.cancellation_reason === 'payment_timeout' && <p className="mt-2 text-sm text-red-700">Cancelada por falta de pago en 2 horas. Asientos liberados.</p>}
                   </div>
                 </div>
 
                 {/* Código y precio */}
-                <div className="flex items-center gap-5 text-right">
-                  <Button
+                <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-5 text-right md:w-auto md:max-w-sm">
+                  {reservation.status === 'pending_payment' && <div className="flex flex-col gap-2">
+                    {reservation.payment_mode === 'demo' && <Button size="sm" disabled={busy === reservation.code} onClick={() => handleAction(reservation, reservationService.payDemo)}>Simular pago (sin cobro)</Button>}
+                    <Button variant="secondary" size="sm" disabled={busy === reservation.code} onClick={() => handleAction(reservation, reservationService.cancelReservation)}>Cancelar reserva</Button>
+                  </div>}
+                  {reservation.status === 'paid' && <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => {
@@ -134,9 +131,9 @@ export default function MyTrips() {
                     }}
                   >
                     Gestionar viaje
-                  </Button>
-                  <div>
-                    <p className="font-mono font-bold text-fox-pink">{reservation.code}</p>
+                  </Button>}
+                  <div className="min-w-0">
+                    <p className="break-all font-mono text-sm font-bold text-fox-pink">{reservation.code}</p>
                     <p className="text-sm text-gray-400">
                       {formatCurrency(reservation.price)}
                     </p>
@@ -159,7 +156,7 @@ export default function MyTrips() {
           <div>
             <p className="text-sm font-semibold text-fox-pink">Posventa demostrativa</p>
             <p className="text-sm text-gray-500">
-              Reserva {selectedReservation.code} · {selectedReservation.seat}
+              Reserva {selectedReservation.code} · {selectedReservation.seats.join(', ')}
             </p>
 
             <p className="mt-4 text-sm text-gray-600">

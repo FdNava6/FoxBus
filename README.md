@@ -2,7 +2,7 @@
 
 Prototipo académico de una plataforma web para mejorar la trazabilidad del pasaje en viajes interprovinciales, desde la búsqueda y reserva hasta el abordaje y la atención posventa.
 
-> Estado: **MVP de demostración para el Avance 1**. El frontend funciona con datos simulados cuando no existe una API disponible. Los pagos, correos, códigos QR y alertas no representan integraciones productivas todavía.
+> Estado: **prototipo académico con backend de reservas y SQLite**. Selección, confirmación, cancelación y vencimientos se guardan en la base de datos. Los horarios/precios son de muestra; los cobros bancarios, correos, códigos QR y alertas no representan integraciones productivas todavía.
 
 ## Problema abordado
 
@@ -28,8 +28,10 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 
 - ruta piloto Lima–Trujillo;
 - buscador, resultados y selección de asiento;
-- checkout demostrativo claramente identificado;
-- consulta de reservas simuladas;
+- sesión de selección y datos de 10 minutos, con retención de asientos;
+- confirmación sin pago y plazo de 2 horas para pagar o cancelar;
+- consulta de reservas persistentes y liberación automática por vencimiento;
+- pago demo optativo y claramente identificado;
 - FoxBot basado en respuestas predefinidas;
 - dashboard administrativo con datos de muestra.
 
@@ -48,12 +50,13 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 | Módulo | Estado |
 | --- | --- |
 | Landing y buscador | Prototipo funcional |
-| Resultados y asientos | Prototipo funcional con datos simulados |
-| Checkout | Simulación; no procesa pagos reales |
-| Mis viajes | Datos simulados sin backend |
+| Resultados y asientos | API con duración, inventario por fecha y retenciones en SQLite |
+| Checkout | Confirmación persistente y plazo de pago; no procesa cobros bancarios |
+| Mis viajes | Estados, límite de pago, cancelación y pago demo optativo |
 | FoxBot | Respuestas locales por palabras clave |
 | Dashboard | Demostración visual con datos estáticos |
-| Backend, pagos y QR | Propuestos para siguientes iteraciones |
+| Backend y base de reservas | Implementados, con job de expiración y pruebas |
+| Pagos bancarios y QR | Integraciones propuestas para siguientes iteraciones |
 
 ## Tecnologías
 
@@ -64,6 +67,7 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 - Axios
 - Recharts
 - Framer Motion
+- Node.js >= 22.13 (recomendado 24 LTS), HTTP y SQLite para reservas
 
 ## Ejecución local
 
@@ -73,7 +77,15 @@ npm install
 npm run dev
 ```
 
-El frontend se abre normalmente en `http://localhost:5173`.
+El frontend se abre normalmente en `http://localhost:5173`. Para usar reservas, iniciar también el backend:
+
+```bash
+cd backend
+cp .env.example .env
+npm start
+```
+
+En PowerShell usar `Copy-Item .env.example .env`. [Configuración, API, base y jobs](backend/README.md). Una falla de API se muestra como error y no crea una reserva ficticia.
 
 Antes de enviar cambios:
 
@@ -81,7 +93,11 @@ Antes de enviar cambios:
 npm run lint
 npm test
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
+
+En `backend`, ejecutar `npm test`. El recorrido E2E usa una base aislada y prueba ambos vencimientos sin esperar 2 horas. [Reglas y plan de verificación](docs/RESERVATION_DEADLINES.md).
 
 ## Documentación del Avance 1
 

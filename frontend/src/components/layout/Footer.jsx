@@ -45,7 +45,7 @@ export default function Footer() {
           <div>
             <h4 className="font-display font-semibold mb-4">Alcance</h4>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li>Reserva demostrativa</li>
+              <li>Reservas con control de plazo</li>
               <li>Boleto QR propuesto</li>
               <li>Posventa guiada</li>
               <li>Dashboard operativo</li>
@@ -56,7 +56,7 @@ export default function Footer() {
           <div>
             <h4 className="font-display font-semibold mb-4">Estado</h4>
             <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-gray-300">
-              MVP de demostración. No procesa pagos ni datos reales.
+              Prototipo con reservas persistentes. Horarios de muestra; no realiza cobros bancarios.
             </p>
           </div>
         </div>

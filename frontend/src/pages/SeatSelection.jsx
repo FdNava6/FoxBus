@@ -4,12 +4,17 @@
 // Usa el store del carrito para guardar los
 // asientos elegidos y calcular el precio total.
 // ============================================
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bus, ArrowLeft, Armchair } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { ROUTES } from '../utils/constants';
 import { formatCurrency } from '../utils/helpers';
+import { tripDuration } from '../utils/bookingTime';
+import { tripService } from '../services/tripService';
+import { bookingErrorMessage, reservationService } from '../services/reservationService';
+import useBookingSession from '../hooks/useBookingSession';
+import ReservationTimer from '../components/common/ReservationTimer';
 
 const TOTAL_ROWS = 10;
 const SEATS_PER_ROW = 4;
@@ -26,28 +31,44 @@ const generateSeats = () => {
   return seats;
 };
 
-// Asientos ya ocupados (demo)
-const occupiedSeats = ['3A', '3B', '5C', '7D', '8A', '9C'];
-
 export default function SeatSelection() {
   const navigate = useNavigate();
-  const { trip, addSeats } = useCartStore();
-  const [selectedSeats, setSelectedSeats] = useState([]);
+  const { trip, seats: selectedSeats } = useCartStore();
+  const { session, remaining, ready, initialized, error, setError, setBookingSession, expire } = useBookingSession({ start: true });
+  const [occupiedSeats, setOccupiedSeats] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!trip) return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const seats = await tripService.getAvailableSeats(trip.id, trip.date);
+        if (active) setOccupiedSeats(seats);
+      } catch (e) { if (active) setError(bookingErrorMessage(e)); }
+    };
+    refresh();
+    const timer = setInterval(refresh, 5000);
+    return () => { active = false; clearInterval(timer); };
+  }, [trip, setError]);
 
   const allSeats = generateSeats();
 
-  const toggleSeat = (seatId) => {
-    if (occupiedSeats.includes(seatId)) return;
-    setSelectedSeats((prev) =>
-      prev.includes(seatId)
-        ? prev.filter((s) => s !== seatId)
-        : [...prev, seatId]
-    );
+  const toggleSeat = async (seatId) => {
+    if (!ready || saving || (occupiedSeats.includes(seatId) && !selectedSeats.includes(seatId))) return;
+    setSaving(true);
+    const next = selectedSeats.includes(seatId) ? selectedSeats.filter((s) => s !== seatId) : [...selectedSeats, seatId];
+    try {
+      setBookingSession(await reservationService.selectSeats(session.code, next));
+      setError('');
+    } catch (e) {
+      if (e.response?.status === 410) expire();
+      else setError(bookingErrorMessage(e));
+    } finally { setSaving(false); }
   };
 
   const handleContinue = () => {
-    addSeats(selectedSeats);
-    navigate(ROUTES.CHECKOUT);
+    if (ready && selectedSeats.length && !saving) navigate(ROUTES.CHECKOUT);
   };
 
   // Agrupa asientos por fila
@@ -69,6 +90,8 @@ export default function SeatSelection() {
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
 
+          {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
+          {!initialized ? <p role="status" className="mb-6">Verificando sesión de reserva...</p> : session?.status === 'active_session' ? <ReservationTimer remaining={remaining} /> : <p className="mb-6">Esta reserva ya fue confirmada. <button onClick={() => navigate(ROUTES.CHECKOUT)} className="text-fox-pink underline">Ver reserva</button></p>}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Mapa de asientos */}
             <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm p-8">
@@ -76,7 +99,7 @@ export default function SeatSelection() {
                 Selecciona tus asientos
               </h2>
               <p className="text-gray-500 text-sm mb-6">
-                {trip?.origin || 'Lima'} → {trip?.destination || 'Trujillo'} · Asientos en rojo están ocupados
+                {trip?.origin} → {trip?.destination} · Asientos en gris oscuro están ocupados
               </p>
 
               {/* Conductor */}
@@ -96,7 +119,8 @@ export default function SeatSelection() {
                         <SeatButton
                           key={seat.id}
                           seat={seat}
-                          occupied={occupiedSeats.includes(seat.id)}
+                          occupied={occupiedSeats.includes(seat.id) && !selectedSeats.includes(seat.id)}
+                          disabled={!ready || saving}
                           selected={selectedSeats.includes(seat.id)}
                           onClick={() => toggleSeat(seat.id)}
                         />
@@ -110,7 +134,8 @@ export default function SeatSelection() {
                         <SeatButton
                           key={seat.id}
                           seat={seat}
-                          occupied={occupiedSeats.includes(seat.id)}
+                          occupied={occupiedSeats.includes(seat.id) && !selectedSeats.includes(seat.id)}
+                          disabled={!ready || saving}
                           selected={selectedSeats.includes(seat.id)}
                           onClick={() => toggleSeat(seat.id)}
                         />
@@ -150,6 +175,7 @@ export default function SeatSelection() {
                   </div>
                 </div>
 
+                <p className="mt-4 text-sm font-semibold text-gray-700">{tripDuration(trip)}</p>
                 <div className="py-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Asientos seleccionados</span>
@@ -172,10 +198,10 @@ export default function SeatSelection() {
 
                 <button
                   onClick={handleContinue}
-                  disabled={selectedSeats.length === 0}
+                  disabled={!ready || saving || selectedSeats.length === 0}
                   className="w-full mt-6 bg-fox-pink hover:bg-fox-pink-dark text-white py-3 rounded-xl font-semibold shadow-fox transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Continuar al pago
+                  Continuar a datos
                 </button>
               </div>
             </div>
@@ -186,7 +212,7 @@ export default function SeatSelection() {
 }
 
 // Botón de asiento individual
-function SeatButton({ seat, occupied, selected, onClick }) {
+function SeatButton({ seat, occupied, selected, disabled, onClick }) {
   const base = 'w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium transition-all';
   const style = occupied
     ? 'bg-gray-400 text-white cursor-not-allowed'
@@ -197,8 +223,10 @@ function SeatButton({ seat, occupied, selected, onClick }) {
   return (
     <button
       onClick={onClick}
-      disabled={occupied}
+      disabled={occupied || disabled}
       className={`${base} ${style}`}
+      aria-label={`Asiento ${seat.id}`}
+      aria-pressed={selected}
       title={`Asiento ${seat.id}`}
     >
       {seat.id}

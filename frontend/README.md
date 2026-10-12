@@ -75,5 +75,24 @@ frontend/
 
 ## Notas
 
-El backend se desarrollará posteriormente. Los servicios usan datos de ejemplo mientras no exista una API conectada. La interfaz identifica expresamente el modo demostración para evitar confundir el prototipo con una operación real.
+Iniciar también el [backend](../backend/README.md). `VITE_API_URL` apunta por defecto a `http://localhost:8080/api`.
+
+- Duración estimada explícita en resultados y resúmenes.
+- Cuenta regresiva de 10 minutos durante selección de asientos y datos.
+- Reserva confirmada sin pago: aviso y límite de 2 horas para pagar o cancelar.
+- Los plazos y estados pertenecen al servidor; recargar no los reinicia.
+- Las reservas se guardan en SQLite y los asientos se liberan con el job, incluso con el navegador cerrado.
+- API no disponible: error visible; no se confirma una reserva ficticia.
+
+Las reservas corresponden a este navegador; el login existente aún es demostrativo. Pagos bancarios, panel y posventa mantienen su alcance de prototipo. El botón “Simular pago (sin cobro)” aparece solo si el backend habilita `DEMO_PAYMENTS`.
+
+## Verificación
+
+```bash
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
 

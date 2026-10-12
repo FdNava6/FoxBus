@@ -13,54 +13,8 @@ import { useCartStore } from '../store/useCartStore';
 import { tripService } from '../services/tripService';
 import { ROUTES } from '../utils/constants';
 import { formatTime, formatCurrency } from '../utils/helpers';
-
-// Datos de ejemplo para el demo (si no hay backend)
-const mockTrips = (origin, destination, date) => [
-  {
-    id: 1,
-    origin,
-    destination,
-    date,
-    departureTime: '06:00',
-    arrivalTime: '11:30',
-    price: 85,
-    service: 'Premium',
-    seatsAvailable: 14,
-  },
-  {
-    id: 2,
-    origin,
-    destination,
-    date,
-    departureTime: '10:00',
-    arrivalTime: '15:30',
-    price: 85,
-    service: 'Premium',
-    seatsAvailable: 22,
-  },
-  {
-    id: 3,
-    origin,
-    destination,
-    date,
-    departureTime: '14:00',
-    arrivalTime: '19:30',
-    price: 70,
-    service: 'Económico',
-    seatsAvailable: 5,
-  },
-  {
-    id: 4,
-    origin,
-    destination,
-    date,
-    departureTime: '22:00',
-    arrivalTime: '03:30',
-    price: 95,
-    service: 'Ejecutivo',
-    seatsAvailable: 9,
-  },
-];
+import { tripDuration } from '../utils/bookingTime';
+import { bookingErrorMessage, reservationService } from '../services/reservationService';
 
 export default function SearchResults() {
   const location = useLocation();
@@ -69,7 +23,7 @@ export default function SearchResults() {
   const setTrip = useCartStore((s) => s.setTrip);
 
   const searchData = useMemo(
-    () => location.state || {
+    () => location.state?.origin ? location.state : {
       origin: 'Lima',
       destination: 'Trujillo',
       date: new Date().toISOString().slice(0, 10),
@@ -79,10 +33,12 @@ export default function SearchResults() {
   );
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const loadTrips = async () => {
       setLoading(true);
+      setError('');
       try {
         const data = await tripService.searchTrips(
           searchData.origin,
@@ -90,10 +46,10 @@ export default function SearchResults() {
           searchData.date,
           searchData.passengers
         );
-        setTrips(data.length ? data : mockTrips(searchData.origin, searchData.destination, searchData.date));
-      } catch {
-        // Sin backend: usa datos de ejemplo
-        setTrips(mockTrips(searchData.origin, searchData.destination, searchData.date));
+        setTrips(data);
+      } catch (e) {
+        setTrips([]);
+        setError(bookingErrorMessage(e));
       } finally {
         setLoading(false);
       }
@@ -101,7 +57,12 @@ export default function SearchResults() {
     loadTrips();
   }, [searchData]);
 
-  const handleSelect = (trip) => {
+  const handleSelect = async (trip) => {
+    const previous = useCartStore.getState().bookingSession;
+    if (previous?.status === 'active_session') {
+      try { await reservationService.cancelReservation(previous.code); }
+      catch (e) { setError(bookingErrorMessage(e)); return; }
+    }
     selectTrip(trip);
     setTrip(trip);
     navigate(ROUTES.SEAT_SELECTION);
@@ -114,6 +75,8 @@ export default function SearchResults() {
           <h1 className="font-display font-bold text-2xl text-gray-800 mb-1">
             Viajes disponibles
           </h1>
+          {location.state?.notice && <p role="status" className="mb-4 rounded-xl bg-amber-50 p-4 text-amber-900">{location.state.notice}</p>}
+          {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
           <div className="flex items-center gap-2 text-gray-500 mb-8">
             <MapPin className="w-4 h-4 text-fox-pink" />
             <span className="font-medium">{searchData.origin}</span>
@@ -127,6 +90,7 @@ export default function SearchResults() {
             <Loading text="Buscando viajes..." />
           ) : (
             <div className="space-y-4">
+              {!error && trips.length === 0 && <p>No hay viajes disponibles para esta búsqueda. El piloto dispone de la ruta Lima → Trujillo.</p>}
               {trips.map((trip) => (
                 <div
                   key={trip.id}
@@ -147,6 +111,8 @@ export default function SearchResults() {
                           {formatTime(`2000-01-01T${trip.arrivalTime}`)}
                         </span>
                       </div>
+                      <p className="mt-2 text-sm font-semibold text-gray-700">{tripDuration(trip)}</p>
+                      {trip.arrivalDayOffset > 0 && <p className="text-xs text-gray-500">Llegada {trip.arrivalDayOffset === 1 ? 'al día siguiente' : `${trip.arrivalDayOffset} días después`}</p>}
                       <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
                         <Clock className="w-4 h-4" />
                         <span>{trip.service}</span>
