@@ -59,9 +59,15 @@ try {
     );
     try {
       await backup(store.db, target);
-      const check = new DatabaseSync(target, { readOnly: true });
-      const result = check.prepare("PRAGMA integrity_check").get();
-      check.close();
+      const check = new DatabaseSync(target);
+      let result;
+      try {
+        // Normalizar exclusivamente el snapshot: copia autónoma sin WAL/SHM.
+        check.exec("PRAGMA journal_mode=DELETE");
+        result = check.prepare("PRAGMA integrity_check").get();
+      } finally {
+        check.close();
+      }
       if (Object.values(result)[0] !== "ok")
         throw new Error("La copia no pasó integrity_check.");
       if (encryptionKey) {
@@ -75,7 +81,9 @@ try {
         console.log("Copia verificada de desarrollo (sin cifrar): " + target);
     } finally {
       // Solo esta copia temporal recién creada; nunca la base activa.
-      if (encryptionKey) rmSync(target, { force: true });
+      if (encryptionKey)
+        for (const suffix of ["", "-wal", "-shm", "-journal"])
+          rmSync(target + suffix, { force: true });
     }
   } else if (command === "doctor") {
     const policy = store.policy(),
