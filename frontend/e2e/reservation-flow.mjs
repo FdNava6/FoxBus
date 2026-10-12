@@ -183,6 +183,10 @@ try {
     .getByText("Duración estimada: 9 horas", { exact: true })
     .first()
     .waitFor();
+  const footerCopy = await page.locator("footer").innerText();
+  assert.equal(footerCopy.includes("Proyecto académico"), false);
+  assert.equal(footerCopy.includes("Entorno de desarrollo"), false);
+  assert.ok(footerCopy.includes("Reserva tu viaje y consulta tus pasajes"));
   await page.screenshot({
     path: resolve(screenshots, "01-search.png"),
     fullPage: true,

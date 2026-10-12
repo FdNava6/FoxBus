@@ -2,19 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { operationsService } from "../../services/operationsService";
 export default function Footer() {
-  const [policy, setPolicy] = useState(null),
-    [health, setHealth] = useState(null);
+  const [policy, setPolicy] = useState(null);
   useEffect(() => {
     operationsService
       .policy()
       .then(setPolicy)
       .catch(() => {});
-    operationsService
-      .health()
-      .then(setHealth)
-      .catch(() => {});
   }, []);
-  const dev = !policy?.taxId || health?.readiness?.demoPayments;
   return (
     <footer className="mt-auto bg-fox-dark pb-14 text-white sm:pb-0">
       <div className="container-fox py-10">
@@ -25,7 +19,7 @@ export default function Footer() {
             </p>
             <p className="text-sm text-gray-300">
               {policy?.legalName ||
-                "Proyecto académico para centralizar reserva, abordaje y atención."}
+                "Reserva tu viaje y consulta tus pasajes en un solo lugar."}
             </p>
             {policy?.taxId && (
               <p className="mt-2 text-sm">RUC: {policy.taxId}</p>
@@ -54,11 +48,6 @@ export default function Footer() {
             <Link className="block underline" to="/recuperar">
               Recuperar reserva o cuenta
             </Link>
-            <p className="rounded-xl border border-white/10 p-3">
-              {dev
-                ? "Entorno de desarrollo con datos de muestra; el pago demo no cobra dinero."
-                : "Reservas con seguimiento, boletos por viajero y atención por los canales publicados."}
-            </p>
           </div>
         </div>
       </div>
