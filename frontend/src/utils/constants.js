@@ -14,24 +14,25 @@ export const ROUTES = {
   SEAT_SELECTION: "/asientos",
   CHECKOUT: "/checkout",
   MY_TRIPS: "/mis-viajes",
+  PREFERENCES: "/preferencias",
   ADMIN: "/admin",
 };
 
-// Ciudades disponibles para los destinos
+// Destinos del corredor norte cubierto desde Lima
 export const CITIES = [
   "Lima",
+  "Chimbote",
   "Trujillo",
   "Chiclayo",
   "Piura",
   "Cajamarca",
-  "Arequipa",
 ];
 
 // Tipos de servicio disponibles en el bus
 export const SERVICE_TYPES = [
   { id: "economico", label: "Económico", priceMultiplier: 1 },
-  { id: "premium", label: "Premium", priceMultiplier: 1.4 },
-  { id: "ejecutivo", label: "Ejecutivo", priceMultiplier: 1.8 },
+  { id: "ejecutivo", label: "Ejecutivo", priceMultiplier: 1.4 },
+  { id: "cama", label: "Cama", priceMultiplier: 1.8 },
 ];
 
 // Servicios a bordo disponibles

@@ -8,6 +8,10 @@ import { formatDeadline } from "../../utils/bookingTime";
 import { formatCurrency } from "../../utils/helpers";
 import Button from "../../components/common/Button";
 import BoardingScanner from "../../components/common/BoardingScanner";
+import Dashboard from "./Dashboard";
+import Passengers from "./Passengers";
+import Offers from "./Offers";
+import FoxBotConfig from "./FoxBotConfig";
 import CounterBooking from "../../components/admin/CounterBooking";
 import StaffFilters from "../../components/admin/StaffFilters";
 import StaffAccess from "../../components/admin/StaffAccess";
@@ -16,16 +20,20 @@ import {
   emptyStaffFilters,
 } from "../../utils/operationsPresentation";
 const access = {
+  metrics: ["admin", "finance", "agent"],
   reservations: ["admin", "agent", "finance"],
+  passengers: ["admin", "agent", "finance"],
+  offers: ["admin", "agent"],
   departures: ["admin", "agent", "finance", "boarding"],
   requests: ["admin", "agent", "finance"],
   financial: ["admin", "finance"],
   boarding: ["admin", "boarding"],
+  foxbot: ["admin"],
   settings: ["admin"],
   users: ["admin"],
-  monitoring: ["admin"],
 };
 const titles = {
+  metrics: "Resumen de la operación",
   reservations: "Reservas e inventario compartido",
   departures: "Salidas y vehículos",
   requests: "Solicitudes y reclamos",
@@ -33,7 +41,6 @@ const titles = {
   boarding: "Validación de abordaje",
   settings: "Datos y políticas del operador",
   users: "Personal autorizado",
-  monitoring: "Estado y auditoría",
 };
 function Field({
   label,
@@ -80,7 +87,7 @@ function Field({
 export default function OperationsConsole() {
   const user = useAuthStore((s) => s.user),
     [params] = useSearchParams();
-  const requested = params.get("view") || "reservations";
+  const requested = params.get("view") || "metrics";
   const view = access[requested]?.includes(user?.role)
     ? requested
     : Object.keys(access).find((k) => access[k].includes(user?.role)) ||
@@ -109,7 +116,6 @@ function OperationsView({ view, user }) {
   const [listLoading, setListLoading] = useState(false);
   const requestVersion = useRef(0);
   const [pilotMode, setPilotMode] = useState(false);
-  const [pilotMetrics, setPilotMetrics] = useState(null);
   useEffect(() => {
     operationsService
       .health()
@@ -133,7 +139,6 @@ function OperationsView({ view, user }) {
         requests: "requests",
         financial: "financial",
         users: "users",
-        monitoring: "monitoring",
       }[view];
       if (path) {
         const result = await operationsService.staffGet(
@@ -209,11 +214,23 @@ function OperationsView({ view, user }) {
   const newVehicle = vehicles.find((v) => v.id === form.vehicleId);
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-bold">{titles[view]}</h1>
-      <p className="text-sm text-gray-600">
-        Cada operación se verifica en el servidor y queda auditada. Rol actual:{" "}
-        {operationLabel(user?.role)}.
-      </p>
+      {view === "metrics" ? (
+        <Dashboard />
+      ) : view === "passengers" ? (
+        <Passengers />
+      ) : view === "offers" ? (
+        <Offers />
+      ) : view === "foxbot" ? (
+        <FoxBotConfig />
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold">{titles[view]}</h1>
+          <p className="text-sm text-gray-600">
+            Cada operación se verifica en el servidor y queda auditada. Rol
+            actual: {operationLabel(user?.role)}.
+          </p>
+        </>
+      )}
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
           {error}
@@ -1036,106 +1053,6 @@ function OperationsView({ view, user }) {
             <Button disabled={busy}>Crear cuenta autorizada</Button>
           </form>
         </>
-      )}
-      {view === "monitoring" && (
-        <section className="space-y-4 rounded-xl bg-white p-5">
-          {pilotMode && (
-            <section className="space-y-3 rounded-xl bg-blue-50 p-4">
-              <h2 className="font-bold">
-                {presentationMode
-                  ? "Resumen de actividad"
-                  : "Informe agregado del piloto"}
-              </h2>
-              <p className="text-sm">
-                {presentationMode ? (
-                  "Conteos de reservas, pagos, boletos y solicitudes. El informe no incluye datos personales."
-                ) : (
-                  <>
-                    Actividad simulada, no ventas ni validación de mercado. El
-                    informe no incluye datos personales; el registro operativo
-                    que sigue es solo para el personal.
-                  </>
-                )}
-              </p>
-              <Button
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  setError("");
-                  try {
-                    setPilotMetrics(
-                      await operationsService.staffGet("pilot-report"),
-                    );
-                  } catch (e) {
-                    setError(bookingErrorMessage(e));
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {presentationMode
-                  ? "Consultar actividad"
-                  : "Consultar informe del piloto"}
-              </Button>
-              {pilotMetrics && (
-                <div role="status" className="space-y-2 text-sm">
-                  <p>
-                    {presentationMode
-                      ? "Pagos registrados:"
-                      : "Pagos simulados:"}{" "}
-                    {pilotMetrics.simulatedPayments} ·{" "}
-                    {presentationMode ? "Boletos:" : "Boletos de prueba:"}{" "}
-                    {pilotMetrics.tickets.issued} ·{" "}
-                    {presentationMode ? "Abordajes:" : "Abordajes de prueba:"}{" "}
-                    {pilotMetrics.tickets.checkedIn}
-                  </p>
-                  {pilotMetrics.reservationsByStatus.map((row) => (
-                    <p key={row.status}>
-                      Reservas {row.status}: {row.count}
-                    </p>
-                  ))}
-                  {pilotMetrics.expirationsByReason.map((row) => (
-                    <p key={row.reason}>
-                      {row.reason === "session_timeout"
-                        ? "Sesiones vencidas a los 10 minutos"
-                        : "Reservas vencidas sin pago a las 2 horas"}
-                      : {row.count}
-                    </p>
-                  ))}
-                  {pilotMetrics.requestsByStatus.map((row) => (
-                    <p key={row.kind + row.status}>
-                      Solicitudes {row.kind} · {row.status}: {row.count}
-                    </p>
-                  ))}
-                  <p>
-                    Integridad de la base: {pilotMetrics.integrity} · Consulta:{" "}
-                    {formatDeadline(pilotMetrics.generatedAt)}
-                  </p>
-                </div>
-              )}
-            </section>
-          )}
-          <h2 className="font-bold">Jobs</h2>
-          {data.jobs?.map((j) => (
-            <p key={j.name}>
-              {j.name} · Último éxito: {j.last_success_at || "Sin ejecución"} ·{" "}
-              {j.last_error || "Sin error"}
-            </p>
-          ))}
-          <p>Casos financieros abiertos: {data.openFinancialCases}</p>
-          <h2 className="font-bold">Notificaciones</h2>
-          {data.notifications?.map((n) => (
-            <p key={n.status}>
-              {n.status}: {n.count}
-            </p>
-          ))}
-          <h2 className="font-bold">Registro de operaciones</h2>
-          {data.audits?.map((a) => (
-            <p key={a.id} className="break-all text-xs">
-              {a.created_at} · {a.action} · {a.resource}
-            </p>
-          ))}
-        </section>
       )}
     </section>
   );

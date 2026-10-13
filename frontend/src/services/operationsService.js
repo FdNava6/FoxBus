@@ -2,6 +2,7 @@ import api from "./api";
 export const operationsService = {
   policy: async () => (await api.get("/policies")).data,
   catalog: async () => (await api.get("/trips/catalog")).data,
+  recommendations: async () => (await api.get("/trips/recommendations")).data,
   upcomingDates: async (params) =>
     (await api.get("/trips/upcoming-dates", { params })).data,
   health: async () => (await api.get("/health")).data,

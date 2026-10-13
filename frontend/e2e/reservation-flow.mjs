@@ -580,6 +580,10 @@ try {
     .click();
   await staff.waitForURL("**/admin");
   await staff
+    .getByRole("heading", { name: "Resumen general de la operación" })
+    .waitFor();
+  await staff.goto(origin + "/admin?view=reservations");
+  await staff
     .getByRole("heading", { name: "Reservas e inventario compartido" })
     .waitFor();
   // Dos ventas consecutivas de ventanilla: mapa compartido y clave nueva.
@@ -692,10 +696,7 @@ try {
   await expect(
     staff.getByRole("article").filter({ hasText: counterOne }),
   ).toHaveCount(1);
-  for (const section of [
-    "Solicitudes y reclamos",
-    "Conciliación y devoluciones",
-  ]) {
+  for (const section of ["Solicitudes", "Conciliación"]) {
     const listed = staff.waitForResponse(
       (response) =>
         /\/api\/staff\/(requests|financial)\?/.test(response.url()) &&
@@ -708,9 +709,7 @@ try {
     ).toHaveValue("");
     await expect(staff.getByRole("alert")).toHaveCount(0);
   }
-  await staff
-    .getByRole("link", { name: "Reservas y caja", exact: true })
-    .click();
+  await staff.getByRole("link", { name: "Reservas", exact: true }).click();
   await expect(
     staff.getByLabel("Canal del filtro", { exact: true }),
   ).toHaveValue("");
@@ -809,7 +808,7 @@ try {
   await staff.goto(origin + "/admin");
   await staff
     .getByRole("heading", {
-      name: "Reservas e inventario compartido",
+      name: "Resumen general de la operación",
       exact: true,
     })
     .waitFor();
@@ -820,29 +819,17 @@ try {
   await staff.setViewportSize({ width: 390, height: 844 });
   await noHorizontalOverflow(staff);
   await staff.getByRole("button", { name: "Menú", exact: true }).click();
-  await staff.getByRole("link", { name: "Estado del servicio" }).click();
-  await staff.getByRole("heading", { name: "Estado y auditoría" }).waitFor();
+  await staff.getByRole("link", { name: "Reservas", exact: true }).click();
+  await staff
+    .getByRole("heading", {
+      name: "Reservas e inventario compartido",
+      exact: true,
+    })
+    .waitFor();
   await staff.screenshot({
     path: resolve(screenshots, "10-mobile-operations.png"),
     fullPage: true,
   });
-  if (pilotMode) {
-    await staff
-      .getByRole("button", {
-        name: presentationMode
-          ? "Consultar actividad"
-          : "Consultar informe del piloto",
-        exact: true,
-      })
-      .click();
-    await expect(
-      staff.getByText(
-        presentationMode ? /Pagos registrados:/ : /Pagos simulados:/,
-      ),
-    ).toBeVisible();
-    await expect(staff.getByText(/Integridad de la base: ok/)).toBeVisible();
-    await noHorizontalOverflow(staff);
-  }
   // Ayuda contextual y móvil: respuestas accionables, no etiquetas académicas.
   await devicePage.goto(origin + "/");
   await devicePage

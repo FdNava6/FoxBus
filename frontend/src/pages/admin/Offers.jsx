@@ -19,7 +19,7 @@ import { formatCurrency } from '../../utils/helpers';
 
 const mockOffers = [
   { id: 1, title: 'Lima - Trujillo', route: 'Salidas cada 2 horas', price: 65, oldPrice: 85, discount: 20, active: true },
-  { id: 2, title: 'Lima - Chiclayo', route: 'Servicio Premium', price: 95, oldPrice: 125, discount: 24, active: true },
+  { id: 2, title: 'Lima - Chiclayo', route: 'Servicio Ejecutivo', price: 95, oldPrice: 125, discount: 24, active: true },
   { id: 3, title: 'Lima - Piura', route: 'Salidas nocturnas', price: 110, oldPrice: 140, discount: 21, active: false },
 ];
 

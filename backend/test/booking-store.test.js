@@ -306,7 +306,7 @@ test("no se inventan salidas ni se venden fechas pasadas o salidas cerradas", (t
   assert.deepEqual(
     store.searchTrips({
       origin: "Lima",
-      destination: "Piura",
+      destination: "Arequipa",
       date: "2026-10-21",
     }),
     [],
@@ -647,7 +647,7 @@ test("SQLite conserva datos y aplica migraciones una sola vez tras reinicio", (t
   assert.equal(second.runExpiration().cancelledUnpaid, 1);
   assert.equal(
     second.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get().n,
-    3,
+    5,
   );
   assert.deepEqual(second.getSeats(1, "2026-10-21"), []);
 });
@@ -676,4 +676,69 @@ test("autenticación real, revocación, roles, recuperación de contraseña y pr
   auth.reset(reset, "a-new-strong-password-2026");
   expectCode(() => auth.reset(reset, "a-third-password-2026"), "LINK_EXPIRED");
   assert.equal(auth.login(u.email, "a-new-strong-password-2026").id, u.id);
+});
+test("las preferencias del pasajero alimentan ofertas personalizadas", (t) => {
+  const { store } = setup(t);
+  assert.equal(store.preferences(alice), null);
+  assert.deepEqual(store.recommendations(alice), {
+    personalized: false,
+    preferences: null,
+    items: [],
+  });
+  expectCode(
+    () =>
+      store.savePreferences(alice, {
+        schedule: "siesta",
+        serviceType: "cama",
+        destination: "Piura",
+      }),
+    "INVALID_PREFERENCE",
+  );
+  expectCode(
+    () =>
+      store.savePreferences(alice, {
+        schedule: "morning",
+        serviceType: "bus",
+        destination: "Piura",
+      }),
+    "INVALID_PREFERENCE",
+  );
+  expectCode(
+    () =>
+      store.savePreferences(alice, {
+        schedule: "morning",
+        serviceType: "cama",
+        destination: "X",
+      }),
+    "INVALID_PREFERENCE",
+  );
+  const saved = store.savePreferences(alice, {
+    schedule: "night",
+    serviceType: "ejecutivo",
+    destination: "Trujillo",
+  });
+  assert.equal(saved.serviceType, "ejecutivo");
+  assert.equal(saved.destination, "Trujillo");
+  assert.equal(store.preferences(bob), null);
+  const result = store.recommendations(alice);
+  assert.equal(result.personalized, true);
+  assert.equal(result.preferences.schedule, "night");
+  assert.ok(result.items.length > 0);
+  assert.equal(result.items[0].destination, "Trujillo");
+  assert.ok(
+    result.items.every(
+      (i) =>
+        i.destination === "Trujillo" ||
+        i.service === "Ejecutivo" ||
+        i.departureTime >= "19:00" ||
+        i.departureTime < "05:00",
+    ),
+  );
+  const updated = store.savePreferences(alice, {
+    schedule: "morning",
+    serviceType: "cama",
+    destination: "Chiclayo",
+  });
+  assert.equal(updated.schedule, "morning");
+  assert.equal(updated.destination, "Chiclayo");
 });

@@ -16,7 +16,7 @@ export default function Footer() {
         <div className="grid gap-8 md:grid-cols-3">
           <div>
             <p className="mb-4 text-xl font-bold">
-              FOX<span className="text-fox-pink-light">bus</span>
+              FOX<span className="text-fox-pink-light">Bus</span>
             </p>
             <p className="text-sm text-gray-300">
               {policy?.legalName ||

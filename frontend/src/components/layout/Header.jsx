@@ -18,11 +18,12 @@ import {
   Home,
   Search,
   Ticket,
+  Sparkles,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "../../store/useAuthStore";
 import { ROUTES } from "../../utils/constants";
-import FOXLogo from "../../assets/FOX.webp";
+import FOXLogo from "../../assets/SinFondo.png";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -35,11 +36,15 @@ export default function Header() {
 
   const closeMenu = () => setMenuOpen(false);
 
-  // Opciones a las que el pasajero tiene acceso.
+  // Opciones a las que el pasajero tiene acceso. Las preferencias de viaje
+  // son exclusivas del rol pasajero; el personal del panel no las ve.
   const passengerLinks = [
     { to: ROUTES.HOME, label: "Inicio", icon: Home },
     { to: ROUTES.SEARCH, label: "Buscar viajes", icon: Search },
     { to: ROUTES.MY_TRIPS, label: "Mis viajes", icon: Ticket },
+    ...(user?.role === "passenger"
+      ? [{ to: ROUTES.PREFERENCES, label: "Preferencias", icon: Sparkles }]
+      : []),
   ];
 
   return (
@@ -49,11 +54,11 @@ export default function Header() {
         <Link to={ROUTES.HOME} className="flex items-center gap-2">
           <img
             src={FOXLogo}
-            alt="FOXbus"
-            className="h-10 w-10 rounded-xl object-contain"
+            alt="FOXBus"
+            className="h-10 w-10 object-contain"
           />
           <span className="font-display text-2xl font-bold text-gray-800">
-            FOX<span className="text-fox-pink">bus</span>
+            FOX<span className="text-fox-pink">Bus</span>
           </span>
         </Link>
 
@@ -141,10 +146,10 @@ export default function Header() {
                 <span className="flex items-center gap-2 font-display text-lg font-bold text-gray-800">
                   <img
                     src={FOXLogo}
-                    alt="FOXbus"
-                    className="h-8 w-8 rounded-lg object-contain"
+                    alt="FOXBus"
+                    className="h-8 w-8 object-contain"
                   />
-                  FOX<span className="text-fox-pink">bus</span>
+                  FOX<span className="text-fox-pink">Bus</span>
                 </span>
                 <button
                   onClick={closeMenu}

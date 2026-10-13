@@ -132,7 +132,7 @@ test("respaldo restaurado conserva marca y bloqueos del piloto sin depender del 
   );
   assert.equal(
     restored.db.prepare("SELECT COUNT(*) AS n FROM departures").get().n,
-    8,
+    2 * restored.db.prepare("SELECT COUNT(*) AS n FROM trips").get().n,
   );
   assert.throws(
     () => bindDatabaseMode(restored, "production"),

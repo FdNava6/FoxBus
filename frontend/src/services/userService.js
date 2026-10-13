@@ -30,6 +30,18 @@ export const userService = {
     return response.data;
   },
 
+  // Obtiene las preferencias de viaje del pasajero actual
+  getPreferences: async () => {
+    const response = await api.get("/users/preferences");
+    return response.data;
+  },
+
+  // Guarda las preferencias de viaje del pasajero actual
+  savePreferences: async (preferences) => {
+    const response = await api.put("/users/preferences", preferences);
+    return response.data;
+  },
+
   // Actualiza el perfil del usuario
   updateProfile: async (userData) => {
     const response = await api.put("/users/profile", userData);

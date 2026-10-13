@@ -59,7 +59,7 @@ export default function AuthForm({ register = false }) {
       <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
         <EnvironmentNotice />
         <Link to="/" className="font-bold text-fox-pink">
-          FOXbus
+          FOXBus
         </Link>
         <h1 className="my-5 text-2xl font-bold">
           {register ? "Crea tu cuenta" : "Inicia sesión"}

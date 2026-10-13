@@ -33,21 +33,23 @@ export default function Hero() {
       <div className="container-fox relative py-10 md:py-16">
         <div className="max-w-3xl">
           <h1 className="mt-2 text-4xl font-bold leading-tight sm:text-5xl md:text-6xl">
-            Tu próximo viaje
-            <span className="mt-3 block text-pink-300">empieza aquí.</span>
+            Conectamos destinos
+            <span className="mt-3 block text-fox-pink-light">
+              creamos experiencias
+            </span>
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-slate-300 md:text-xl">
-            Elige tu viaje, reserva tus asientos y consulta tus pasajes en un
-            solo lugar.
+            FOXBUS propone una experiencia digital con reserva trazable,
+            asiento elegido y atención guiada durante todo el viaje.
           </p>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="mt-6 flex flex-wrap items-center gap-6">
             {highlights.map(({ icon: Icon, text }) => (
               <div
                 key={text}
                 className="flex items-center gap-2 text-sm text-slate-200"
               >
-                <Icon className="h-5 w-5 text-pink-300" />
+                <Icon className="h-5 w-5 text-fox-pink-light" />
                 <span>{text}</span>
               </div>
             ))}

@@ -252,6 +252,8 @@ export function createApi({
         result = { ...store.policy(), simulation: pilotMode || demoPayments };
       else if (method === "GET" && path === "/api/trips/catalog")
         result = store.catalog();
+      else if (method === "GET" && path === "/api/trips/recommendations")
+        result = store.recommendations(needOwner());
       else if (method === "GET" && path === "/api/trips/search")
         result = store.searchTrips(params);
       else if (method === "GET" && path === "/api/trips/upcoming-dates")
@@ -281,6 +283,12 @@ export function createApi({
         result = { message: "Sesión cerrada." };
       } else if (method === "GET" && path === "/api/users/profile") {
         result = { user: auth.require(user) };
+      } else if (method === "GET" && path === "/api/users/preferences") {
+        result = { preferences: store.preferences(needOwner()) };
+      } else if (method === "PUT" && path === "/api/users/preferences") {
+        result = {
+          preferences: store.savePreferences(needOwner(), await body()),
+        };
       } else if (method === "POST" && path === "/api/auth/reset-request")
         result = auth.requestReset((await body()).email);
       else if (method === "POST" && path === "/api/auth/reset") {

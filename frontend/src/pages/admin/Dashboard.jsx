@@ -29,11 +29,11 @@
     ];
 
     const destinationData = [
-    { name: 'Lima - Trujillo', value: 38, color: '#FF4C9C' },
+    { name: 'Lima - Trujillo', value: 32, color: '#EF4593' },
     { name: 'Lima - Chiclayo', value: 24, color: '#9333EA' },
     { name: 'Lima - Piura', value: 18, color: '#3B82F6' },
-    { name: 'Lima - Cajamarca', value: 12, color: '#10B981' },
-    { name: 'Lima - Arequipa', value: 8, color: '#F59E0B' },
+    { name: 'Lima - Chimbote', value: 14, color: '#10B981' },
+    { name: 'Lima - Cajamarca', value: 12, color: '#F59E0B' },
     ];
 
     const alerts = [

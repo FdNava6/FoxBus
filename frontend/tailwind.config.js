@@ -5,9 +5,9 @@ export default {
     extend: {
       colors: {
         fox: {
-          pink: "#C2185B",
-          "pink-dark": "#9D104A",
-          "pink-light": "#FF6BAF",
+          pink: "#EF4593",
+          "pink-dark": "#D23882",
+          "pink-light": "#F98BC0",
           dark: "#1A1A2E",
           gray: "#F5F7FA",
           "gray-dark": "#2D3748",
@@ -18,8 +18,8 @@ export default {
         display: ["Poppins", "sans-serif"],
       },
       boxShadow: {
-        fox: "0 4px 20px rgba(255, 76, 156, 0.15)",
-        "fox-lg": "0 10px 40px rgba(255, 76, 156, 0.2)",
+        fox: "0 4px 20px rgba(239, 69, 147, 0.15)",
+        "fox-lg": "0 10px 40px rgba(239, 69, 147, 0.2)",
       },
     },
   },

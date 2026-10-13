@@ -34,7 +34,7 @@ export default function AdminLayout() {
           >
             Menú
           </button>
-          <p className="font-bold">Operación FOXbus</p>
+          <p className="font-bold">Operación FOXBus</p>
           <p className="text-sm">{operationLabel(user?.role)}</p>
         </header>
         <EnvironmentNotice />

@@ -42,6 +42,8 @@ export class BookingStore {
       [1, "001_booking_deadlines.sql"],
       [2, "002_operations.sql"],
       [3, "003_passenger_experience.sql"],
+      [4, "004_corridor_norte.sql"],
+      [5, "005_passenger_preferences.sql"],
     ]) {
       if (
         this.db
@@ -235,8 +237,10 @@ export class BookingStore {
             vehicleId,
             iso(Date.parse(departureAt)),
             iso(Date.parse(departureAt) + trip.duration_minutes * 60000),
-            "Terminal de muestra Lima · confirmar con operador",
-            "Terminal de muestra Trujillo · confirmar con operador",
+            "Terminal de muestra " + trip.origin + " · confirmar con operador",
+            "Terminal de muestra " +
+              trip.destination +
+              " · confirmar con operador",
           );
       }
     }
@@ -357,6 +361,85 @@ export class BookingStore {
         "SELECT DISTINCT t.origin,t.destination FROM departures d JOIN trips t ON t.id=d.trip_id WHERE d.status='scheduled' AND d.departure_at>?",
       )
       .all(iso(this.clock()));
+  }
+  preferences(owner) {
+    return (
+      this.db
+        .prepare(
+          "SELECT schedule,service_type AS serviceType,destination,updated_at AS updatedAt FROM passenger_preferences WHERE owner_hash=?",
+        )
+        .get(owner) || null
+    );
+  }
+  savePreferences(owner, { schedule, serviceType, destination } = {}) {
+    if (!["morning", "afternoon", "night"].includes(schedule))
+      fail(400, "INVALID_PREFERENCE", "Elige un horario de viaje.");
+    if (!["economico", "ejecutivo", "cama"].includes(serviceType))
+      fail(400, "INVALID_PREFERENCE", "Elige un tipo de servicio.");
+    const place = typeof destination === "string" ? destination.trim() : "";
+    if (place.length < 2 || place.length > 100)
+      fail(400, "INVALID_PREFERENCE", "Elige un destino del corredor norte.");
+    this.db
+      .prepare(
+        "INSERT INTO passenger_preferences(owner_hash,schedule,service_type,destination,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET schedule=excluded.schedule,service_type=excluded.service_type,destination=excluded.destination,updated_at=excluded.updated_at",
+      )
+      .run(owner, schedule, serviceType, place, iso(this.clock()));
+    return this.preferences(owner);
+  }
+  recommendations(owner) {
+    const preferences = this.preferences(owner);
+    const serviceLabel = {
+        economico: "Económico",
+        ejecutivo: "Ejecutivo",
+        cama: "Cama",
+      },
+      inWindow = {
+        morning: (t) => t >= "05:00" && t < "12:00",
+        afternoon: (t) => t >= "12:00" && t < "19:00",
+        night: (t) => t >= "19:00" || t < "05:00",
+      };
+    const seen = new Set(),
+      trips = [];
+    for (const row of this.db
+      .prepare(
+        "SELECT t.id,t.origin,t.destination,t.departure_time AS departureTime,t.duration_minutes AS durationMinutes,t.price_cents AS priceCents,t.service,d.travel_date AS date FROM trips t JOIN departures d ON d.trip_id=t.id WHERE d.status='scheduled' AND d.departure_at>? ORDER BY d.departure_at",
+      )
+      .all(iso(this.clock()))) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      trips.push(row);
+    }
+    const score = (row) => {
+      if (!preferences) return 0;
+      let points = 0;
+      if (row.destination.toLowerCase() === preferences.destination.toLowerCase())
+        points += 4;
+      if (row.service === serviceLabel[preferences.serviceType]) points += 2;
+      if (inWindow[preferences.schedule]?.(row.departureTime)) points += 1;
+      return points;
+    };
+    return {
+      personalized: Boolean(preferences),
+      preferences,
+      items: (preferences ? trips.filter((t) => score(t) > 0) : [])
+        .sort(
+          (a, b) =>
+            score(b) - score(a) ||
+            a.date.localeCompare(b.date) ||
+            a.departureTime.localeCompare(b.departureTime),
+        )
+        .slice(0, 6)
+        .map((t) => ({
+          id: t.id,
+          origin: t.origin,
+          destination: t.destination,
+          date: t.date,
+          departureTime: t.departureTime,
+          durationMinutes: t.durationMinutes,
+          price: t.priceCents / 100,
+          service: t.service,
+        })),
+    };
   }
   searchTrips({ origin, destination, date, passengers = 1 }) {
     validateDate(date);

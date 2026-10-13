@@ -72,7 +72,7 @@ test("CLI genera copia consistente cifrada y permite restaurar en otra ubicació
   );
   assert.equal(
     restored.prepare("SELECT COUNT(*) AS n FROM departures").get().n,
-    8,
+    2 * restored.prepare("SELECT COUNT(*) AS n FROM trips").get().n,
   );
   restored.close();
 });

@@ -38,6 +38,7 @@ const Policies = lazy(() => import("./pages/Policies"));
 const TicketPage = lazy(() => import("./pages/TicketPage"));
 const ReservationReceipt = lazy(() => import("./pages/ReservationReceipt"));
 const Help = lazy(() => import("./pages/Help"));
+const Preferences = lazy(() => import("./pages/Preferences"));
 const PilotGuide = lazy(() => import("./pages/PilotGuide"));
 import { useAuthStore } from "./store/useAuthStore";
 import ErrorBoundary from "./components/common/ErrorBoundary";
@@ -64,7 +65,7 @@ function App() {
           <Suspense
             fallback={
               <div className="grid min-h-screen place-items-center text-gray-500">
-                Cargando FOXbus…
+                Cargando FOXBus…
               </div>
             }
           >
@@ -81,6 +82,7 @@ function App() {
                 <Route path="/asientos" element={<SeatSelection />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/mis-viajes" element={<MyTrips />} />
+                <Route path="/preferencias" element={<Preferences />} />
                 <Route path="/recuperar" element={<Recovery />} />
                 <Route path="/condiciones" element={<Policies />} />
                 <Route path="/boletos/:code" element={<TicketPage />} />
