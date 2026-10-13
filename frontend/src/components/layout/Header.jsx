@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "../../store/useAuthStore";
 import { ROUTES } from "../../utils/constants";
-import FOXLogo from "../../assets/FOX.png";
+import FOXLogo from "../../assets/FOX.webp";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);

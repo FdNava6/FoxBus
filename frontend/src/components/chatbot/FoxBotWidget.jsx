@@ -8,6 +8,7 @@ const allowed = new Set([
   "/recuperar",
   "/condiciones",
   "/ayuda",
+  "/piloto",
 ]);
 const quickReplies = [
   "¿Cómo compro un pasaje?",

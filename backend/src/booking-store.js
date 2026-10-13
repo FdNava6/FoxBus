@@ -92,6 +92,8 @@ export class BookingStore {
       .run(actor, action, resource, JSON.stringify(detail), iso(this.clock()));
   }
   transaction(action) {
+    // Una operación compuesta (ventanilla) tiene un único commit/rollback.
+    if (this.db.isTransaction) return action(this.clock());
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const now = this.clock();

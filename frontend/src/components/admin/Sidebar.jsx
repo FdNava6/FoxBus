@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../../store/useAuthStore";
+import { operationLabel } from "../../utils/operationsPresentation";
 const entries = [
   ["reservations", "Reservas y caja", ["admin", "agent", "finance"]],
   ["departures", "Salidas y buses", ["admin", "agent", "finance", "boarding"]],
@@ -18,7 +19,7 @@ export default function Sidebar({ onClose }) {
     <aside className="h-full w-64 bg-fox-dark p-5 text-white">
       <p className="mb-5 text-xl font-bold">FOXbus · Operación</p>
       <p className="mb-6 text-sm">
-        {user?.name} · {user?.role}
+        {user?.name} · {operationLabel(user?.role)}
       </p>
       <nav className="space-y-2">
         {entries

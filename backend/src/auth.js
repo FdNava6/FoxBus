@@ -137,19 +137,106 @@ export class AuthStore {
   }
   claimActive(guestOwner, user) {
     if (!guestOwner) return;
-    this.db
-      .prepare(
-        "INSERT OR REPLACE INTO reservation_grants SELECT reservation_code,?,expires_at FROM reservation_grants WHERE owner_hash=?",
+    return this.store.transaction(() => {
+      const target = accountOwner(user.id);
+      // La prueba de propiedad es la credencial del navegador, nunca un correo
+      // coincidente. No se alteran estado, importe, asientos ni vencimientos.
+      this.db
+        .prepare(
+          "INSERT INTO reservation_grants SELECT reservation_code,?,expires_at FROM reservation_grants WHERE owner_hash=? ON CONFLICT(reservation_code,owner_hash) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at)",
+        )
+        .run(target, guestOwner);
+      this.db
+        .prepare("DELETE FROM reservation_grants WHERE owner_hash=?")
+        .run(guestOwner);
+      const result = this.db
+        .prepare("UPDATE reservations SET owner_hash=? WHERE owner_hash=?")
+        .run(target, guestOwner);
+      this.db
+        .prepare("UPDATE service_requests SET owner_hash=? WHERE owner_hash=?")
+        .run(target, guestOwner);
+      this.db
+        .prepare("UPDATE outbox SET owner_hash=? WHERE owner_hash=?")
+        .run(target, guestOwner);
+      this.db
+        .prepare(
+          "UPDATE privacy_acceptances SET owner_hash=? WHERE owner_hash=?",
+        )
+        .run(target, guestOwner);
+      if (result.changes)
+        this.store.audit(user.id, "guest_reservations_linked", "account", {
+          count: result.changes,
+        });
+      return { linked: result.changes };
+    });
+  }
+  updateStaff(id, { role, active, revokeSessions = false, reason }, actor) {
+    this.require(actor, ["admin"]);
+    const staffRoles = ["admin", "agent", "finance", "boarding"];
+    if (
+      !staffRoles.includes(role) ||
+      typeof active !== "boolean" ||
+      typeof revokeSessions !== "boolean" ||
+      typeof reason !== "string" ||
+      reason.trim().length < 10 ||
+      reason.length > 500
+    )
+      fail(
+        400,
+        "INVALID_STAFF_UPDATE",
+        "Indica rol, estado y un motivo de al menos 10 caracteres.",
+      );
+    return this.store.transaction(() => {
+      const target = this.db
+        .prepare("SELECT * FROM users WHERE id=? AND role!='passenger'")
+        .get(id);
+      if (!target)
+        fail(404, "STAFF_NOT_FOUND", "Cuenta del personal no encontrada.");
+      const removesAdmin =
+        target.role === "admin" &&
+        target.active === 1 &&
+        (!active || role !== "admin");
+      if (
+        removesAdmin &&
+        this.db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1",
+          )
+          .get().n <= 1
       )
-      .run(accountOwner(user.id), guestOwner);
-    this.db
-      .prepare("DELETE FROM reservation_grants WHERE owner_hash=?")
-      .run(guestOwner);
-    this.db
-      .prepare(
-        "UPDATE reservations SET owner_hash=? WHERE owner_hash=? AND status='active_session'",
-      )
-      .run(accountOwner(user.id), guestOwner);
+        fail(
+          409,
+          "LAST_ADMIN_REQUIRED",
+          "Debe permanecer al menos un administrador activo.",
+        );
+      if (actor.id === id && (!active || role !== target.role))
+        fail(
+          409,
+          "SELF_ACCOUNT_PROTECTED",
+          "Otro administrador debe modificar tu propio rol o desactivarte.",
+        );
+      const changed = role !== target.role || Number(active) !== target.active;
+      this.db
+        .prepare("UPDATE users SET role=?,active=? WHERE id=?")
+        .run(role, Number(active), id);
+      const revoked =
+        changed || revokeSessions
+          ? this.db.prepare("DELETE FROM auth_sessions WHERE user_id=?").run(id)
+              .changes
+          : 0;
+      this.store.audit(actor.id, "staff_access_updated", id, {
+        role,
+        active,
+        sessionsRevoked: revoked,
+        reason: reason.trim(),
+      });
+      return {
+        user: { ...publicUser({ ...target, role }), active },
+        sessionsRevoked: revoked,
+        message:
+          "Permisos del personal actualizados; los cambios de acceso revocan sus sesiones.",
+      };
+    });
   }
   requestReset(email) {
     const user = this.db

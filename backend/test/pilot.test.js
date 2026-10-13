@@ -262,10 +262,15 @@ async function setup(t) {
   };
   const login = async () =>
     (
-      await request("/auth/login", "POST", {
-        email: admin.email,
-        password: "pilot-password-2026",
-      })
+      await request(
+        "/auth/login",
+        "POST",
+        {
+          email: admin.email,
+          password: "pilot-password-2026",
+        },
+        "b".repeat(64),
+      )
     ).cookie;
   return {
     store,

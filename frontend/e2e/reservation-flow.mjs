@@ -32,7 +32,7 @@ const store = new OperationsStore(":memory:", {
 });
 const pilotMode = process.env.FOXBUS_E2E_MODE === "pilot";
 bindDatabaseMode(store, pilotMode ? "pilot" : "development");
-const travelDate = new Date(Date.parse(limaDate(Date.now())) + 86400000)
+const travelDate = new Date(Date.parse(limaDate(Date.now())) + 2 * 86400000)
   .toISOString()
   .slice(0, 10);
 store.seedDemoSchedule(limaDate(Date.now()), 5);
@@ -51,7 +51,7 @@ const server = createApi({
   devMailbox: true,
   pilotMode,
 });
-await new Promise((r) => server.listen(0, r));
+await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const apiPort = server.address().port;
 const stopJob = startExpirationJob(store, { intervalMs: 1000 });
 const vite = spawn(
@@ -540,6 +540,237 @@ try {
   await staff
     .getByRole("heading", { name: "Reservas e inventario compartido" })
     .waitFor();
+  // Dos ventas consecutivas de ventanilla: mapa compartido y clave nueva.
+  page = staff;
+  const counter = staff.getByRole("form", {
+    name: "Reserva de ventanilla",
+    exact: true,
+  });
+  await counter
+    .getByLabel("Salida de ventanilla", { exact: true })
+    .selectOption(store.departure(1, travelDate).id);
+  const counterSale = async (label, buyerName) => {
+    await counter
+      .getByRole("button", {
+        name: "Ventanilla, asiento " + label,
+        exact: true,
+      })
+      .click();
+    await counter
+      .getByLabel("Nombre del comprador de ventanilla", { exact: true })
+      .fill(buyerName);
+    await counter
+      .getByLabel("Correo del comprador de ventanilla", { exact: true })
+      .fill("counter@example.test");
+    await counter
+      .getByLabel("Teléfono del comprador de ventanilla", { exact: true })
+      .fill("900000000");
+    await counter
+      .getByLabel("Nombre, asiento " + label, { exact: true })
+      .fill("Viajero ficticio");
+    await counter
+      .getByLabel("Documento, asiento " + label, { exact: true })
+      .fill("12345678");
+    await counter
+      .getByLabel("Nacimiento, asiento " + label, { exact: true })
+      .fill("1990-01-01");
+    await counter.getByRole("checkbox").check();
+    await counter
+      .getByRole("button", {
+        name: "Confirmar reserva en inventario compartido",
+        exact: true,
+      })
+      .click();
+    const last = staff
+      .getByRole("article")
+      .filter({ hasText: "Última reserva de ventanilla confirmada" });
+    await expect(last.getByText(new RegExp(buyerName))).toBeVisible();
+    await expect(
+      counter.getByLabel("Nombre del comprador de ventanilla", { exact: true }),
+    ).toHaveValue("");
+    return (await last.locator("code").innerText()).trim();
+  };
+  const counterOne = await counterSale("3B", "Venta ficticia primera"),
+    counterTwo = await counterSale("3C", "Venta ficticia segunda");
+  assert.notEqual(counterOne, counterTwo);
+  await expect(
+    counter.getByRole("button", {
+      name: "Ventanilla, asiento 3B",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    counter.getByRole("button", {
+      name: "Ventanilla, asiento 3C",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await counter.scrollIntoViewIfNeeded();
+  await staff.screenshot({
+    path: resolve(screenshots, "17-counter-map.png"),
+    fullPage: false,
+  });
+  assert.deepEqual(
+    store.db
+      .prepare("SELECT selected_seats FROM reservations WHERE code=?")
+      .get(counterOne).selected_seats,
+    '["3B"]',
+  );
+  assert.deepEqual(
+    store.db
+      .prepare("SELECT selected_seats FROM reservations WHERE code=?")
+      .get(counterTwo).selected_seats,
+    '["3C"]',
+  );
+  await staff
+    .getByLabel("Buscar código, comprador o ruta", { exact: true })
+    .fill(counterTwo);
+  await staff
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    staff.getByRole("article").filter({ hasText: counterOne }),
+  ).toHaveCount(0);
+  await staff
+    .getByRole("button", { name: "Limpiar filtros", exact: true })
+    .click();
+  await expect(
+    staff.getByRole("article").filter({ hasText: counterOne }),
+  ).toHaveCount(1);
+  // Cambiar de sección no arrastra filtros, filas ni formularios incompatibles.
+  await staff
+    .getByLabel("Estado del filtro", { exact: true })
+    .selectOption("pending_payment");
+  await staff
+    .getByLabel("Canal del filtro", { exact: true })
+    .selectOption("counter");
+  await staff
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    staff.getByRole("article").filter({ hasText: counterOne }),
+  ).toHaveCount(1);
+  for (const section of [
+    "Solicitudes y reclamos",
+    "Conciliación y devoluciones",
+  ]) {
+    const listed = staff.waitForResponse(
+      (response) =>
+        /\/api\/staff\/(requests|financial)\?/.test(response.url()) &&
+        response.status() === 200,
+    );
+    await staff.getByRole("link", { name: section, exact: true }).click();
+    await listed;
+    await expect(
+      staff.getByLabel("Estado del filtro", { exact: true }),
+    ).toHaveValue("");
+    await expect(staff.getByRole("alert")).toHaveCount(0);
+  }
+  await staff
+    .getByRole("link", { name: "Reservas y caja", exact: true })
+    .click();
+  await expect(
+    staff.getByLabel("Canal del filtro", { exact: true }),
+  ).toHaveValue("");
+  await expect(
+    staff.getByRole("article").filter({ hasText: counterOne }),
+  ).toHaveCount(1);
+  await expect(staff.getByRole("alert")).toHaveCount(0);
+  // Gestión de una cuenta ficticia: cancelar no cambia nada y confirmar revoca.
+  const employeeResponse = await staff.request.post(
+    "http://localhost:" + apiPort + "/api/staff/users",
+    {
+      data: {
+        name: "Empleado ficticio",
+        email: "employee@example.test",
+        password: "test-employee-password-2026",
+        role: "agent",
+      },
+    },
+  );
+  assert.equal(employeeResponse.status(), 200);
+  const employee = await employeeResponse.json(),
+    employeeToken = new AuthStore(store).issue(employee);
+  await staff.goto(origin + "/admin?view=users");
+  await staff
+    .getByRole("heading", { name: "Personal autorizado", exact: true })
+    .waitFor();
+  await staff
+    .getByRole("button", {
+      name: "Gestionar acceso de Empleado ficticio",
+      exact: true,
+    })
+    .click();
+  const staffAccess = staff.getByRole("form", {
+    name: "Modificar acceso del personal",
+    exact: true,
+  });
+  await staffAccess
+    .getByLabel("Rol del personal", { exact: true })
+    .selectOption("boarding");
+  await staffAccess
+    .getByLabel("Motivo del cambio", { exact: true })
+    .fill("Cambio de funciones durante el ensayo de prueba");
+  await staffAccess
+    .getByRole("button", { name: "Revisar cambio de acceso", exact: true })
+    .click();
+  const accessDialog = staff.getByRole("alertdialog", {
+    name: "¿Aplicar este cambio de acceso?",
+    exact: true,
+  });
+  await accessDialog
+    .getByRole("button", { name: "Volver sin cambios", exact: true })
+    .click();
+  assert.equal(
+    store.db.prepare("SELECT role FROM users WHERE id=?").get(employee.id).role,
+    "agent",
+  );
+  await staffAccess
+    .getByRole("button", { name: "Revisar cambio de acceso", exact: true })
+    .click();
+  await accessDialog
+    .getByRole("button", { name: "Sí, actualizar acceso", exact: true })
+    .click();
+  await expect(staffAccess).toHaveCount(0);
+  assert.equal(
+    store.db.prepare("SELECT role FROM users WHERE id=?").get(employee.id).role,
+    "boarding",
+  );
+  assert.equal(
+    new AuthStore(store).authenticate("foxbus_session=" + employeeToken),
+    null,
+  );
+  await staff
+    .getByRole("button", {
+      name: "Gestionar acceso de Empleado ficticio",
+      exact: true,
+    })
+    .click();
+  await staffAccess
+    .getByLabel("Estado de la cuenta", { exact: true })
+    .selectOption("false");
+  await staffAccess
+    .getByLabel("Motivo del cambio", { exact: true })
+    .fill("Fin de la participación ficticia en el ensayo");
+  await staffAccess
+    .getByRole("button", { name: "Revisar cambio de acceso", exact: true })
+    .click();
+  await accessDialog
+    .getByRole("button", { name: "Sí, actualizar acceso", exact: true })
+    .click();
+  await expect(staffAccess).toHaveCount(0);
+  assert.equal(
+    store.db.prepare("SELECT active FROM users WHERE id=?").get(employee.id)
+      .active,
+    0,
+  );
+  await staff.goto(origin + "/admin");
+  await staff
+    .getByRole("heading", {
+      name: "Reservas e inventario compartido",
+      exact: true,
+    })
+    .waitFor();
   await staff.screenshot({
     path: resolve(screenshots, "09-operations.png"),
     fullPage: true,
@@ -625,6 +856,79 @@ try {
     );
   }
   assert.deepEqual(errors, []);
+  // Reserva invitada ya confirmada permanece accesible tras crear cuenta.
+  const recording = process.env.FOXBUS_RECORD_DEMO === "true";
+  const signupContext = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    ...(recording
+      ? {
+          recordVideo: {
+            dir: resolve(screenshots, "demo"),
+            size: { width: 1280, height: 800 },
+          },
+        }
+      : {}),
+  });
+  const signup = await signupContext.newPage(),
+    pauseDemo = async () => {
+      if (recording) await sleep(2000);
+    };
+  await signup.goto(`${origin}/resultados?date=${travelDate}`);
+  await signup
+    .getByText("Duración estimada: 9 horas", { exact: true })
+    .first()
+    .waitFor();
+  await pauseDemo();
+  await selectTrip(signup);
+  await chooseSeat(signup, "3A");
+  await pauseDemo();
+  await confirm(signup);
+  const guestBeforeSignup = await currentSession(signup);
+  await pauseDemo();
+  await signup.goto(origin + "/register");
+  await signup.getByLabel("Nombre completo").fill("Participante ficticio");
+  await signup
+    .getByLabel("Correo", { exact: true })
+    .fill("signup-guest@example.test");
+  await signup
+    .getByLabel("Contraseña", { exact: true })
+    .fill("test-signup-guest-2026");
+  await signup
+    .getByLabel("Confirmar contraseña")
+    .fill("test-signup-guest-2026");
+  await signup.getByRole("checkbox").check();
+  await signup
+    .getByRole("button", { name: "Crear cuenta", exact: true })
+    .click();
+  await signup.waitForURL("**/mis-viajes");
+  await signup.getByText(guestBeforeSignup.code, { exact: true }).waitFor();
+  await pauseDemo();
+  const linked = store.db
+    .prepare("SELECT * FROM reservations WHERE code=?")
+    .get(guestBeforeSignup.code);
+  assert.equal(
+    linked.payment_deadline_at,
+    guestBeforeSignup.payment_deadline_at,
+  );
+  await signup
+    .getByRole("button", { name: "Simular pago (sin cobro)", exact: true })
+    .click();
+  await signup
+    .getByRole("link", { name: "Ver boletos QR", exact: true })
+    .click();
+  await signup.getByRole("img", { name: /Código QR del boleto/ }).waitFor();
+  await expect(signup.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+  await pauseDemo();
+  await signup.screenshot({
+    path: resolve(screenshots, "16-guest-linked-ticket.png"),
+    fullPage: true,
+  });
+  const video = signup.video();
+  await signupContext.close();
+  if (recording) console.log("VIDEO_DEMO=" + (await video.path()));
+  console.log(
+    "EXPO E2E OK: dos reservas de ventanilla distintas, filtros y reserva invitada vinculada tras registro.",
+  );
   console.log(
     "E2E OK: duración, bloqueo entre navegadores, recargas, pago, cancelación, ambos vencimientos, móvil y fallo de API.",
   );

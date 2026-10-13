@@ -3,6 +3,7 @@ import { Outlet } from "react-router-dom";
 import Sidebar from "../admin/Sidebar";
 import { useAuthStore } from "../../store/useAuthStore";
 import EnvironmentNotice from "../common/EnvironmentNotice";
+import { operationLabel } from "../../utils/operationsPresentation";
 export default function AdminLayout() {
   const [open, setOpen] = useState(false),
     user = useAuthStore((s) => s.user);
@@ -34,7 +35,7 @@ export default function AdminLayout() {
             Menú
           </button>
           <p className="font-bold">Operación FOXbus</p>
-          <p className="text-sm">{user?.role}</p>
+          <p className="text-sm">{operationLabel(user?.role)}</p>
         </header>
         <EnvironmentNotice />
         <main className="p-4 lg:p-6">

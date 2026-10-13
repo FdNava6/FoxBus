@@ -1,6 +1,15 @@
 import { randomUUID, randomBytes } from "node:crypto";
 import { BookingStore } from "./booking-store.js";
-import { fail, iso, digest, validateDate, limaDate } from "./domain.js";
+import {
+  fail,
+  iso,
+  digest,
+  validateDate,
+  limaDate,
+  contactData,
+  travelersData,
+} from "./domain.js";
+import { staffList } from "./staff-list.js";
 
 export class OperationsStore extends BookingStore {
   requestRecovery({ code, email }) {
@@ -177,29 +186,110 @@ export class OperationsStore extends BookingStore {
       return this.view(this.owned(code, owner), now);
     });
   }
-  staffReservations() {
+  staffReservations(params) {
+    return this.transaction((now) =>
+      params
+        ? staffList(this.db, "reservations", params, (row) =>
+            this.view(row, now),
+          )
+        : this.db
+            .prepare(
+              "SELECT * FROM reservations ORDER BY created_at DESC LIMIT 500",
+            )
+            .all()
+            .map((r) => this.view(r, now)),
+    );
+  }
+  requests(params) {
+    return params
+      ? staffList(this.db, "requests", params)
+      : this.db
+          .prepare(
+            "SELECT s.*,r.trip_id,r.travel_date FROM service_requests s JOIN reservations r ON r.code=s.reservation_code ORDER BY s.created_at DESC LIMIT 500",
+          )
+          .all();
+  }
+  financialCases(params) {
+    return params
+      ? staffList(this.db, "financial", params)
+      : this.db
+          .prepare(
+            "SELECT * FROM financial_cases ORDER BY created_at DESC LIMIT 500",
+          )
+          .all();
+  }
+  reserveAtCounter(data, actor) {
+    if (
+      !Array.isArray(data.seats) ||
+      !data.seats.length ||
+      data.seats.length > 6 ||
+      data.seats.some((seat) => typeof seat !== "string") ||
+      new Set(data.seats).size !== data.seats.length
+    )
+      fail(400, "INVALID_SEATS", "Selecciona de 1 a 6 asientos diferentes.");
+    const contact = contactData(data.contact),
+      travelers = travelersData(data.travelers, data.seats, data.date);
+    const fingerprint = (reservation) =>
+      JSON.stringify({
+        tripId: Number(reservation.tripId),
+        date: reservation.date,
+        passengers: reservation.passengers,
+        contact: contactData(reservation.contact),
+        seats: [...reservation.seats].sort(),
+        travelers: travelersData(
+          reservation.travelers,
+          reservation.seats,
+          reservation.date,
+        ).sort((a, b) => a.seat.localeCompare(b.seat)),
+      });
+    return this.transaction(() => {
+      const previous = this.db
+        .prepare(
+          "SELECT * FROM reservations WHERE request_key=? AND channel='counter' AND created_by=? ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(data.requestKey, actor.id);
+      const owner =
+        previous?.owner_hash ||
+        digest("counter:" + actor.id + ":" + data.requestKey);
+      const session = this.startSession(owner, data, actor, "counter");
+      if (session.status !== "active_session") {
+        if (["expired", "cancelled"].includes(session.status))
+          fail(
+            410,
+            "RESERVATION_EXPIRED",
+            "La operación de ventanilla venció o fue cancelada. Empieza una reserva nueva.",
+          );
+        if (
+          fingerprint({ ...data, contact, travelers }) !==
+          fingerprint({
+            tripId: session.trip.id,
+            date: session.date,
+            passengers: session.passengerCount,
+            contact: session.contact,
+            seats: session.seats,
+            travelers: session.travelers,
+          })
+        )
+          fail(
+            409,
+            "REQUEST_KEY_REUSED",
+            "La operación ya confirmó otra reserva. Usa Nueva reserva de ventanilla; no reutilices su clave.",
+          );
+        return session;
+      }
+      this.selectSeats(session.code, owner, data.seats);
+      return this.confirm(session.code, owner, { ...data, contact, travelers });
+    });
+  }
+  departureInventory(id) {
     return this.transaction((now) =>
       this.db
         .prepare(
-          "SELECT * FROM reservations ORDER BY created_at DESC LIMIT 500",
+          "SELECT * FROM reservations WHERE departure_id=? AND status IN ('active_session','pending_payment','paid') ORDER BY created_at,code",
         )
-        .all()
-        .map((r) => this.view(r, now)),
+        .all(id)
+        .map((row) => this.view(row, now)),
     );
-  }
-  requests() {
-    return this.db
-      .prepare(
-        "SELECT s.*,r.trip_id,r.travel_date FROM service_requests s JOIN reservations r ON r.code=s.reservation_code ORDER BY s.created_at DESC LIMIT 500",
-      )
-      .all();
-  }
-  financialCases() {
-    return this.db
-      .prepare(
-        "SELECT * FROM financial_cases ORDER BY created_at DESC LIMIT 500",
-      )
-      .all();
   }
   resolveRequest(id, actor, { status, response, targetDepartureId, seatMap }) {
     if (
@@ -790,6 +880,44 @@ export class OperationsStore extends BookingStore {
     const p = this.policy(),
       m = String(message || "").toLowerCase();
     const action = (label, to) => ({ label, to });
+    if (this.pilotMode) {
+      if (/pago|pagar|tarjeta|yape|plin/.test(m))
+        return {
+          message:
+            "En este piloto no hay cobros, tarjetas, transferencias ni efectivo real. Confirma tu reserva, abre Mis viajes y pulsa Simular pago (sin cobro). El plazo sigue siendo 2 horas y el QR resultante es de prueba, sin validez para viajar.",
+          actions: [
+            action("Simular desde mi reserva", "/mis-viajes"),
+            action("Ver guía del piloto", "/piloto"),
+          ],
+        };
+      if (/recuper|codigo|código|contrase|correo|buz[oó]n/.test(m))
+        return {
+          message:
+            "El piloto no envía correos externos. Solicita recuperación con tu dirección ficticia @example.test y consulta Guía y mensajes de prueba en el navegador o cuenta que controla la reserva. Copia el enlace de un solo uso a tu segundo navegador de prueba; vence en 30 minutos. Si perdiste todo acceso, el coordinador organiza la prueba: no se muestran buzones ajenos.",
+          actions: [
+            action("Solicitar recuperación", "/recuperar"),
+            action("Mis mensajes de prueba", "/piloto"),
+          ],
+        };
+      if (/devol|reprogram|retras|cancel|reclamo/.test(m))
+        return {
+          message:
+            "Las gestiones de este piloto son simuladas. En Mis viajes puedes cancelar una reserva sin pagar o registrar una solicitud sobre un pago de prueba. El personal responde y simula una devolución; nunca se transfiere dinero ni se presta un viaje real.",
+          actions: [
+            action("Gestionar mi prueba", "/mis-viajes"),
+            action("Ver guía del piloto", "/piloto"),
+          ],
+        };
+      if (/compra|pasaje|reserva/.test(m))
+        return {
+          message:
+            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa datos ficticios, con correo @example.test; tienes 10 minutos. 3. Confirma sin pagar: cuentas con 2 horas para simular pago o cancelar. 4. Guarda el comprobante y QR identificados como documentos de prueba. No hay cobros ni viajes reales.",
+          actions: [
+            action("Empezar búsqueda", "/resultados"),
+            action("Ver guía del piloto", "/piloto"),
+          ],
+        };
+    }
     if (m.includes("equipaje"))
       return {
         message:

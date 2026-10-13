@@ -17,6 +17,11 @@ import {
   contactLinks,
 } from "../src/utils/reservationPresentation.js";
 import { useCartStore } from "../src/store/useCartStore.js";
+import {
+  newCounterDraft,
+  operationLabel,
+  emptyStaffFilters,
+} from "../src/utils/operationsPresentation.js";
 function memory() {
   const data = new Map();
   return {
@@ -29,6 +34,20 @@ function memory() {
     removeItem: (k) => data.delete(k),
   };
 }
+test("cada operación nueva de ventanilla obtiene clave nueva y limpia asientos/condiciones", () => {
+  const first = newCounterDraft("departure"),
+    second = newCounterDraft("departure");
+  assert.notEqual(first.requestKey, second.requestKey);
+  assert.deepEqual(second.seats, []);
+  assert.equal(second.acceptTerms, false);
+  assert.equal(second.departureId, "departure");
+  assert.equal(operationLabel("scheduled"), "Programada");
+  assert.equal(operationLabel("in_review"), "En revisión");
+  assert.equal(operationLabel("counter"), "Ventanilla");
+  const filter = emptyStaffFilters();
+  filter.search = "Uno";
+  assert.equal(emptyStaffFilters().search, "");
+});
 test("borrador aislado por reserva, sin renovar plazo y borrado al vencer/confirmar/salir", () => {
   const storage = memory(),
     deadline = "2026-10-20T12:10:00Z",

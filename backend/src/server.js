@@ -9,14 +9,7 @@ import {
   operatorReady,
 } from "./passenger-experience.js";
 import { OperationsStore } from "./operations-store.js";
-import {
-  BookingError,
-  fail,
-  ownerHash,
-  accountOwner,
-  iso,
-  digest,
-} from "./domain.js";
+import { BookingError, fail, ownerHash, accountOwner, iso } from "./domain.js";
 import { AuthStore } from "./auth.js";
 import { startExpirationJob } from "./jobs/expire-reservations.js";
 import { startNotificationJob } from "./jobs/notifications.js";
@@ -322,10 +315,10 @@ export function createApi({
         const actor = auth.require(user);
         if (method === "GET" && path === "/api/staff/reservations") {
           auth.require(user, staff);
-          result = store.staffReservations();
+          result = store.staffReservations(url.search ? params : undefined);
         } else if (method === "GET" && path === "/api/staff/requests") {
           auth.require(user, staff);
-          result = store.requests();
+          result = store.requests(url.search ? params : undefined);
         } else if (
           method === "PUT" &&
           /^\/api\/staff\/requests\/[^/]+$/.test(path)
@@ -348,7 +341,7 @@ export function createApi({
           );
         } else if (method === "GET" && path === "/api/staff/financial") {
           auth.require(user, ["admin", "finance"]);
-          result = store.financialCases();
+          result = store.financialCases(url.search ? params : undefined);
         } else if (
           method === "PUT" &&
           /^\/api\/staff\/financial\/[^/]+$/.test(path)
@@ -401,6 +394,12 @@ export function createApi({
         } else if (method === "POST" && path === "/api/staff/vehicles") {
           auth.require(user, ["admin"]);
           result = store.saveVehicle(await body(), actor);
+        } else if (
+          method === "GET" &&
+          /^\/api\/staff\/departures\/[^/]+\/inventory$/.test(path)
+        ) {
+          auth.require(user, ["admin"]);
+          result = store.departureInventory(path.split("/")[4]);
         } else if (method === "GET" && path === "/api/staff/departures") {
           auth.require(user, ["admin", "agent", "finance", "boarding"]);
           result = store.departures();
@@ -420,12 +419,22 @@ export function createApi({
         } else if (method === "GET" && path === "/api/staff/users") {
           auth.require(user, ["admin"]);
           result = store.db
-            .prepare("SELECT id,name,email,role,active FROM users")
+            .prepare(
+              "SELECT id,name,email,role,active FROM users WHERE role!='passenger' ORDER BY name,id",
+            )
             .all();
         } else if (method === "POST" && path === "/api/staff/users") {
           auth.require(user, ["admin"]);
           const data = await body();
+          if (!["admin", "agent", "finance", "boarding"].includes(data.role))
+            fail(400, "INVALID_ROLE", "Elige un rol válido del personal.");
           result = auth.register(data, data.role);
+        } else if (
+          method === "PUT" &&
+          /^\/api\/staff\/users\/[^/]+$/.test(path)
+        ) {
+          auth.require(user, ["admin"]);
+          result = auth.updateStaff(path.split("/")[4], await body(), actor);
         } else if (method === "PUT" && path === "/api/staff/policies") {
           auth.require(user, ["admin"]);
           result = store.setPolicy(await body(), actor);
@@ -454,17 +463,7 @@ export function createApi({
         } else if (method === "POST" && path === "/api/staff/counter") {
           auth.require(user, staff);
           const data = await body();
-          const buyerOwner = digest("counter:" + data.requestKey);
-          const session = store.startSession(
-            buyerOwner,
-            data,
-            actor,
-            "counter",
-          );
-          if (session.status === "active_session") {
-            store.selectSeats(session.code, buyerOwner, data.seats);
-            result = store.confirm(session.code, buyerOwner, data);
-          } else result = session;
+          result = decorate(store.reserveAtCounter(data, actor));
         } else if (method === "POST" && path === "/api/staff/payments") {
           auth.require(user, ["admin", "finance"]);
           const data = await body();

@@ -7,7 +7,7 @@
 // ============================================
 import { CheckCircle2, QrCode, Route } from "lucide-react";
 import SearchBox from "./SearchBox";
-import BUSLogo from "../../assets/BUS.png";
+import BUSLogo from "../../assets/BUS.webp";
 
 const highlights = [
   { icon: QrCode, text: "Boleto digital QR" },

@@ -18,7 +18,16 @@ export const operationsService = {
     (await api.get("/reservations/" + code + "/tickets")).data,
   request: async (code, data) =>
     (await api.post("/reservations/" + code + "/requests", data)).data,
-  staffGet: async (path) => (await api.get("/staff/" + path)).data,
+  staffGet: async (path, params) =>
+    (await api.get("/staff/" + path, { params })).data,
+  departureInventory: async (id) =>
+    id
+      ? (
+          await api.get(
+            "/staff/departures/" + encodeURIComponent(id) + "/inventory",
+          )
+        ).data
+      : [],
   staffPost: async (path, data) =>
     (await api.post("/staff/" + path, data)).data,
   staffPut: async (path, data) => (await api.put("/staff/" + path, data)).data,

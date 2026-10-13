@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { operationsService } from "../../services/operationsService";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -7,6 +7,13 @@ import { formatDeadline } from "../../utils/bookingTime";
 import { formatCurrency } from "../../utils/helpers";
 import Button from "../../components/common/Button";
 import BoardingScanner from "../../components/common/BoardingScanner";
+import CounterBooking from "../../components/admin/CounterBooking";
+import StaffFilters from "../../components/admin/StaffFilters";
+import StaffAccess from "../../components/admin/StaffAccess";
+import {
+  operationLabel,
+  emptyStaffFilters,
+} from "../../utils/operationsPresentation";
 const access = {
   reservations: ["admin", "agent", "finance"],
   departures: ["admin", "agent", "finance", "boarding"],
@@ -77,12 +84,29 @@ export default function OperationsConsole() {
     ? requested
     : Object.keys(access).find((k) => access[k].includes(user?.role)) ||
       "departures";
+  // Aislar cada sección evita mezclar filtros, filas y formularios de otro
+  // listado durante la navegación (p. ej. «pagado» no existe en solicitudes).
+  return <OperationsView key={view} view={view} user={user} />;
+}
+function OperationsView({ view, user }) {
   const [data, setData] = useState([]),
     [departures, setDepartures] = useState([]),
     [vehicles, setVehicles] = useState([]),
     [routes, setRoutes] = useState([]),
     [reservations, setReservations] = useState([]),
     [policy, setPolicy] = useState(null);
+  const paginated = ["reservations", "requests", "financial"].includes(view);
+  const [filterDraft, setFilterDraft] = useState(emptyStaffFilters);
+  const [filters, setFilters] = useState(emptyStaffFilters);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 25,
+    total: 0,
+    totalPages: 1,
+  });
+  const [listLoading, setListLoading] = useState(false);
+  const requestVersion = useRef(0);
   const [pilotMode, setPilotMode] = useState(false);
   const [pilotMetrics, setPilotMetrics] = useState(null);
   useEffect(() => {
@@ -97,10 +121,10 @@ export default function OperationsConsole() {
     [selected, setSelected] = useState(null),
     [form, setForm] = useState({}),
     [mapping, setMapping] = useState({});
-  const [buyer, setBuyer] = useState({ name: "", email: "", phone: "" }),
-    [travelers, setTravelers] = useState({}),
-    [token, setToken] = useState("");
+  const [token, setToken] = useState("");
   const load = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setListLoading(true);
     try {
       const path = {
         reservations: "reservations",
@@ -110,7 +134,17 @@ export default function OperationsConsole() {
         users: "users",
         monitoring: "monitoring",
       }[view];
-      if (path) setData(await operationsService.staffGet(path));
+      if (path) {
+        const result = await operationsService.staffGet(
+          path,
+          paginated ? { ...filters, page, pageSize: 25 } : undefined,
+        );
+        if (version !== requestVersion.current) return;
+        if (paginated) {
+          setData(result.items);
+          setPagination(result);
+        } else setData(result);
+      }
       setPolicy(await operationsService.policy());
       if (["departures", "reservations", "requests"].includes(view))
         setDepartures(await operationsService.staffGet("departures"));
@@ -125,11 +159,15 @@ export default function OperationsConsole() {
       )
         setRoutes(await operationsService.staffGet("routes"));
       if (view === "departures" && user.role === "admin")
-        setReservations(await operationsService.staffGet("reservations"));
+        setReservations(
+          await operationsService.departureInventory(selected?.id),
+        );
     } catch (e) {
-      setError(bookingErrorMessage(e));
+      if (version === requestVersion.current) setError(bookingErrorMessage(e));
+    } finally {
+      if (version === requestVersion.current) setListLoading(false);
     }
-  }, [view, user]);
+  }, [view, user, paginated, filters, page, selected]);
   useEffect(() => {
     const first = setTimeout(load, 0),
       timer = setInterval(load, 15000);
@@ -160,34 +198,6 @@ export default function OperationsConsole() {
     label:
       d.origin + " → " + d.destination + " · " + formatDeadline(d.departure_at),
   }));
-  const picked = future.find((d) => d.id === form.departureId),
-    seatIds = String(form.seats || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  const submitCounter = async (e) => {
-    e.preventDefault();
-    if (!picked) return;
-    const requestKey = form.requestKey || crypto.randomUUID();
-    setForm({ ...form, requestKey });
-    await run(() =>
-      operationsService.staffPost("counter", {
-        tripId: picked.trip_id,
-        date: picked.travel_date,
-        requestKey,
-        passengers: seatIds.length,
-        seats: seatIds,
-        contact: buyer,
-        travelers: seatIds.map((seat) => ({
-          seat,
-          documentType: "DNI",
-          ...travelers[seat],
-        })),
-        acceptTerms: form.acceptTerms === true,
-        policyVersion: policy.version,
-      }),
-    );
-  };
   const held = reservations
     .filter(
       (r) =>
@@ -201,7 +211,7 @@ export default function OperationsConsole() {
       <h1 className="text-2xl font-bold">{titles[view]}</h1>
       <p className="text-sm text-gray-600">
         Cada operación se verifica en el servidor y queda auditada. Rol actual:{" "}
-        {user?.role}.
+        {operationLabel(user?.role)}.
       </p>
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
@@ -213,13 +223,35 @@ export default function OperationsConsole() {
           {notice}
         </p>
       )}
+      {paginated && (
+        <StaffFilters
+          view={view}
+          draft={filterDraft}
+          setDraft={setFilterDraft}
+          pagination={pagination}
+          loading={listLoading}
+          onPage={setPage}
+          onApply={() => {
+            setFilters({ ...filterDraft });
+            setPage(1);
+            setError("");
+          }}
+          onReset={() => {
+            setFilterDraft(emptyStaffFilters());
+            setFilters(emptyStaffFilters());
+            setPage(1);
+            setError("");
+          }}
+        />
+      )}
       {view === "reservations" && (
         <>
           <div className="space-y-4">
             {data.map((r) => (
               <article key={r.code} className="rounded-xl bg-white p-4">
                 <p className="font-bold">
-                  {r.route} · {r.status} · {r.channel}
+                  {r.route} · {operationLabel(r.status)} ·{" "}
+                  {operationLabel(r.channel)}
                 </p>
                 <p>
                   {r.date} · {r.seats.join(", ")} · {formatCurrency(r.price)}
@@ -294,95 +326,18 @@ export default function OperationsConsole() {
               </Button>
             </form>
           )}
-          <form
-            onSubmit={submitCounter}
-            className="space-y-4 rounded-xl bg-white p-5"
-          >
-            <h2 className="font-bold">Reserva de ventanilla o agencia</h2>
-            <Field
-              label="Salida"
-              value={form.departureId}
-              onChange={(v) => change("departureId", v)}
-              options={depOptions}
-            />
-            <Field
-              label="Asientos (separados por coma, máximo 6)"
-              value={form.seats}
-              onChange={(v) => change("seats", v)}
-            />
-            {[
-              ["name", "Nombre del comprador"],
-              ["email", "Correo del comprador"],
-              ["phone", "Teléfono"],
-            ].map(([key, label]) => (
-              <Field
-                key={key}
-                label={label}
-                value={buyer[key]}
-                type={key === "email" ? "email" : "text"}
-                onChange={(v) => setBuyer({ ...buyer, [key]: v })}
-              />
-            ))}
-            {seatIds.map((seat, i) => {
-              const p = travelers[seat] || {};
-              const update = (k, v) =>
-                setTravelers({ ...travelers, [seat]: { ...p, [k]: v } });
-              return (
-                <fieldset
-                  key={seat}
-                  className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2"
-                >
-                  <legend>
-                    Viajero {i + 1} · {seat}
-                  </legend>
-                  <Field
-                    label="Nombre"
-                    value={p.name}
-                    onChange={(v) => update("name", v)}
-                  />
-                  <Field
-                    label="Documento"
-                    value={p.documentNumber}
-                    onChange={(v) => update("documentNumber", v)}
-                  />
-                  <Field
-                    label="Tipo"
-                    value={p.documentType || "DNI"}
-                    onChange={(v) => update("documentType", v)}
-                    options={["DNI", "CE", "PASSPORT"].map((v) => ({
-                      value: v,
-                      label: v,
-                    }))}
-                  />
-                  <Field
-                    label="Nacimiento"
-                    type="date"
-                    value={p.birthDate}
-                    onChange={(v) => update("birthDate", v)}
-                  />
-                  <Field
-                    label="Responsable del menor, si corresponde"
-                    required={false}
-                    value={p.guardian}
-                    onChange={(v) => update("guardian", v)}
-                  />
-                </fieldset>
+          <CounterBooking
+            departures={departures}
+            policy={policy}
+            disabled={busy}
+            pilotMode={pilotMode}
+            onReserved={async (reservation) => {
+              setNotice(
+                "Reserva de ventanilla confirmada: " + reservation.code,
               );
-            })}
-            <label className="flex gap-2 text-sm">
-              <input
-                type="checkbox"
-                required
-                checked={form.acceptTerms || false}
-                onChange={(e) => change("acceptTerms", e.target.checked)}
-              />
-              El comprador recibió y aceptó las condiciones y el aviso de
-              privacidad.
-            </label>
-            <Button disabled={busy || !policy}>
-              Confirmar reserva en inventario compartido
-            </Button>
-          </form>
+              await load();
+            }}
+          />
         </>
       )}
       {view === "departures" && (
@@ -391,7 +346,7 @@ export default function OperationsConsole() {
             {data.map((d) => (
               <article key={d.id} className="rounded-xl bg-white p-4">
                 <p className="font-bold">
-                  {d.origin} → {d.destination} · {d.status}
+                  {d.origin} → {d.destination} · {operationLabel(d.status)}
                 </p>
                 <p>
                   {formatDeadline(d.departure_at)} · Bus {d.vehicle_id}
@@ -440,7 +395,7 @@ export default function OperationsConsole() {
                     onChange={(v) => change("status", v)}
                     options={["scheduled", "closed", "cancelled"].map((v) => ({
                       value: v,
-                      label: v,
+                      label: operationLabel(v),
                     }))}
                   />
                   <Field
@@ -717,7 +672,7 @@ export default function OperationsConsole() {
           {data.map((s) => (
             <article key={s.id} className="space-y-2 rounded-xl bg-white p-4">
               <p className="font-bold">
-                {s.kind} · {s.status}
+                {operationLabel(s.kind)} · {operationLabel(s.status)}
               </p>
               <p>{s.message}</p>
               <p className="break-all text-xs">
@@ -811,7 +766,7 @@ export default function OperationsConsole() {
           {data.map((c) => (
             <article key={c.id} className="space-y-2 rounded-xl bg-white p-4">
               <p className="font-bold">
-                {c.reason} · {c.status}
+                {operationLabel(c.reason)} · {operationLabel(c.status)}
               </p>
               <p className="break-all text-xs">
                 {c.id} · {c.reservation_code || "Reserva desconocida"} ·{" "}
@@ -1023,16 +978,25 @@ export default function OperationsConsole() {
       )}
       {view === "users" && (
         <>
-          {data.map((u) => (
-            <p key={u.id} className="rounded-xl bg-white p-3">
-              {u.name} · {u.email} · {u.role}
-            </p>
-          ))}
+          <StaffAccess
+            users={data}
+            actor={user}
+            onUpdated={async (result) => {
+              setNotice(result.message);
+              if (result.user.id === user.id && result.sessionsRevoked) {
+                await useAuthStore.getState().logout();
+              } else await load();
+            }}
+          />
           <form
             className="space-y-4 rounded-xl bg-white p-5"
             onSubmit={(e) => {
               e.preventDefault();
-              run(() => operationsService.staffPost("users", form));
+              void run(() => operationsService.staffPost("users", form)).then(
+                (result) => {
+                  if (result) setForm({});
+                },
+              );
             }}
           >
             <h2 className="font-bold">Crear cuenta del personal</h2>
