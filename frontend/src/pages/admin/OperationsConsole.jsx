@@ -83,6 +83,14 @@ export default function OperationsConsole() {
     [routes, setRoutes] = useState([]),
     [reservations, setReservations] = useState([]),
     [policy, setPolicy] = useState(null);
+  const [pilotMode, setPilotMode] = useState(false);
+  const [pilotMetrics, setPilotMetrics] = useState(null);
+  useEffect(() => {
+    operationsService
+      .health()
+      .then((health) => setPilotMode(health.app_mode === "pilot"))
+      .catch(() => {});
+  }, []);
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
@@ -230,7 +238,9 @@ export default function OperationsConsole() {
                         setForm({ reference: "", verified: false });
                       }}
                     >
-                      Registrar efectivo recibido
+                      {pilotMode
+                        ? "Simular pago en caja"
+                        : "Registrar efectivo recibido"}
                     </Button>
                   )}
               </article>
@@ -248,15 +258,21 @@ export default function OperationsConsole() {
                     amountCents: Math.round(selected.price * 100),
                     method: "cash",
                     verified: form.verified,
+                    simulate: pilotMode,
                   }),
                 );
               }}
             >
               <h2 className="font-bold">
-                Cobro en caja · {formatCurrency(selected.price)}
+                {pilotMode ? "Simulación de caja" : "Cobro en caja"} ·{" "}
+                {formatCurrency(selected.price)}
               </h2>
               <Field
-                label="Comprobante de caja (único)"
+                label={
+                  pilotMode
+                    ? "Referencia ficticia de caja (única)"
+                    : "Comprobante de caja (único)"
+                }
                 value={form.reference}
                 onChange={(v) => change("reference", v)}
               />
@@ -267,10 +283,15 @@ export default function OperationsConsole() {
                   checked={form.verified || false}
                   onChange={(e) => change("verified", e.target.checked)}
                 />
-                Confirmo que recibí el efectivo y verifiqué el importe. Los
-                pagos bancarios usan su adaptador.
+                {pilotMode
+                  ? "Confirmo que es una simulación y no he recibido dinero real."
+                  : "Confirmo que recibí el efectivo y verifiqué el importe. Los pagos bancarios usan su adaptador."}
               </label>
-              <Button disabled={busy}>Registrar efectivo</Button>
+              <Button disabled={busy}>
+                {pilotMode
+                  ? "Confirmar pago simulado de caja"
+                  : "Registrar efectivo"}
+              </Button>
             </form>
           )}
           <form
@@ -805,7 +826,9 @@ export default function OperationsConsole() {
                     setForm({});
                   }}
                 >
-                  Registrar devolución efectuada
+                  {pilotMode
+                    ? "Simular devolución"
+                    : "Registrar devolución efectuada"}
                 </Button>
               )}
             </article>
@@ -820,17 +843,27 @@ export default function OperationsConsole() {
                     reference: form.reference,
                     amountCents: Math.round(Number(form.amount) * 100),
                     response: form.response,
+                    simulate: pilotMode,
                   }),
                 );
               }}
             >
-              <h2 className="font-bold">Comprobante de reintegro</h2>
+              <h2 className="font-bold">
+                {pilotMode
+                  ? "Devolución ficticia del piloto"
+                  : "Comprobante de reintegro"}
+              </h2>
               <p className="text-sm">
-                Registra una devolución ya verificada. Esta acción no ordena una
-                transferencia bancaria.
+                {pilotMode
+                  ? "Esta acción solo cierra un caso de prueba; no devuelve dinero ni ordena transferencias."
+                  : "Registra una devolución ya verificada. Esta acción no ordena una transferencia bancaria."}
               </p>
               <Field
-                label="Referencia única del reintegro"
+                label={
+                  pilotMode
+                    ? "Referencia ficticia única de la devolución"
+                    : "Referencia única del reintegro"
+                }
                 value={form.reference}
                 onChange={(v) => change("reference", v)}
               />
@@ -846,7 +879,11 @@ export default function OperationsConsole() {
                 value={form.response}
                 onChange={(v) => change("response", v)}
               />
-              <Button disabled={busy}>Registrar comprobante</Button>
+              <Button disabled={busy}>
+                {pilotMode
+                  ? "Confirmar devolución simulada"
+                  : "Registrar comprobante"}
+              </Button>
               <hr className="my-4" />
               <Field
                 label="Fecha estimada de solución (hora de Perú)"
@@ -1031,6 +1068,65 @@ export default function OperationsConsole() {
       )}
       {view === "monitoring" && (
         <section className="space-y-4 rounded-xl bg-white p-5">
+          {pilotMode && (
+            <section className="space-y-3 rounded-xl bg-blue-50 p-4">
+              <h2 className="font-bold">Informe agregado del piloto</h2>
+              <p className="text-sm">
+                Actividad simulada, no ventas ni validación de mercado. El
+                informe no incluye datos personales; el registro operativo que
+                sigue es solo para el personal.
+              </p>
+              <Button
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    setPilotMetrics(
+                      await operationsService.staffGet("pilot-report"),
+                    );
+                  } catch (e) {
+                    setError(bookingErrorMessage(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Consultar informe del piloto
+              </Button>
+              {pilotMetrics && (
+                <div role="status" className="space-y-2 text-sm">
+                  <p>
+                    Pagos simulados: {pilotMetrics.simulatedPayments} · Boletos
+                    de prueba: {pilotMetrics.tickets.issued} · Abordajes de
+                    prueba: {pilotMetrics.tickets.checkedIn}
+                  </p>
+                  {pilotMetrics.reservationsByStatus.map((row) => (
+                    <p key={row.status}>
+                      Reservas {row.status}: {row.count}
+                    </p>
+                  ))}
+                  {pilotMetrics.expirationsByReason.map((row) => (
+                    <p key={row.reason}>
+                      {row.reason === "session_timeout"
+                        ? "Sesiones vencidas a los 10 minutos"
+                        : "Reservas vencidas sin pago a las 2 horas"}
+                      : {row.count}
+                    </p>
+                  ))}
+                  {pilotMetrics.requestsByStatus.map((row) => (
+                    <p key={row.kind + row.status}>
+                      Solicitudes {row.kind} · {row.status}: {row.count}
+                    </p>
+                  ))}
+                  <p>
+                    Integridad de la base: {pilotMetrics.integrity} · Consulta:{" "}
+                    {formatDeadline(pilotMetrics.generatedAt)}
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
           <h2 className="font-bold">Jobs</h2>
           {data.jobs?.map((j) => (
             <p key={j.name}>

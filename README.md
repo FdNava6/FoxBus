@@ -75,6 +75,8 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 
 ## Ejecución local
 
+Para una prueba con el grupo **sin cobros ni correos reales**, usar [el piloto aislado](docs/PILOTO_SIN_COBROS.md): `npm run pilot` desde backend y `npm run dev` desde frontend. Se conserva la base anterior; el piloto tiene su propia base, bloquea proveedores externos e identifica los boletos como documentos sin validez para viajar. La guía está en `/piloto`.
+
 ```bash
 cd frontend
 npm ci

@@ -15,6 +15,7 @@ import { AuthStore } from "../../backend/src/auth.js";
 import { limaDate } from "../../backend/src/domain.js";
 import { createApi } from "../../backend/src/server.js";
 import { startExpirationJob } from "../../backend/src/jobs/expire-reservations.js";
+import { bindDatabaseMode } from "../../backend/src/runtime-config.js";
 
 const allocatePort = async () => {
   const server = createServer();
@@ -29,6 +30,8 @@ let offset = 0;
 const store = new OperationsStore(":memory:", {
   clock: () => Date.now() + offset,
 });
+const pilotMode = process.env.FOXBUS_E2E_MODE === "pilot";
+bindDatabaseMode(store, pilotMode ? "pilot" : "development");
 const travelDate = new Date(Date.parse(limaDate(Date.now())) + 86400000)
   .toISOString()
   .slice(0, 10);
@@ -46,6 +49,7 @@ const server = createApi({
   origin,
   demoPayments: true,
   devMailbox: true,
+  pilotMode,
 });
 await new Promise((r) => server.listen(0, r));
 const apiPort = server.address().port;
@@ -74,7 +78,9 @@ vite.stderr.on("data", (d) => {
 });
 let browser;
 let page;
-const screenshots = resolve("test-results/reservation-flow");
+const screenshots = resolve(
+  pilotMode ? "test-results/pilot-flow" : "test-results/reservation-flow",
+);
 mkdirSync(screenshots, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const currentSession = (page) =>
@@ -301,9 +307,7 @@ try {
     (await currentSession(page)).payment_deadline_at,
     pending.payment_deadline_at,
   );
-  await page
-    .getByText("No hay un medio de pago real publicado.", { exact: false })
-    .waitFor();
+  await page.getByText("Solo pagos de prueba.", { exact: false }).waitFor();
   assert.equal(
     await page
       .getByRole("button", { name: "Pagar online", exact: true })
@@ -549,6 +553,17 @@ try {
     path: resolve(screenshots, "10-mobile-operations.png"),
     fullPage: true,
   });
+  if (pilotMode) {
+    await staff
+      .getByRole("button", {
+        name: "Consultar informe del piloto",
+        exact: true,
+      })
+      .click();
+    await expect(staff.getByText(/Pagos simulados:/)).toBeVisible();
+    await expect(staff.getByText(/Integridad de la base: ok/)).toBeVisible();
+    await noHorizontalOverflow(staff);
+  }
   // Ayuda contextual y móvil: respuestas accionables, no etiquetas académicas.
   await devicePage.goto(origin + "/");
   await devicePage
@@ -578,6 +593,37 @@ try {
   await devicePage
     .getByRole("button", { name: "Cerrar ayuda de FoxBot" })
     .click();
+  if (pilotMode) {
+    await devicePage
+      .getByRole("link", { name: "Guía y mensajes de prueba", exact: true })
+      .click();
+    await devicePage
+      .getByRole("heading", { name: "Piloto sin cobros reales", exact: true })
+      .waitFor();
+    await devicePage
+      .getByRole("button", { name: "Ver mis mensajes de prueba", exact: true })
+      .click();
+    await expect(
+      devicePage.getByText(/Guardado localmente ·/).first(),
+    ).toBeVisible();
+    await noHorizontalOverflow(devicePage);
+    await devicePage.screenshot({
+      path: resolve(screenshots, "15-pilot-mobile.png"),
+      fullPage: true,
+    });
+    await devicePage.goto(origin + "/reservas/" + accountBooking.code);
+    await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+    await devicePage.emulateMedia({ media: "print" });
+    await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+    await devicePage.emulateMedia({ media: "screen" });
+    const receipt = await devicePage.request.get(
+      "http://localhost:" + apiPort + "/api/health",
+    );
+    assert.equal((await receipt.json()).app_mode, "pilot");
+    console.log(
+      "PILOTO E2E OK: base aislada, mensajes propios, guía móvil y marca imprimible sin validez para viajar.",
+    );
+  }
   assert.deepEqual(errors, []);
   console.log(
     "E2E OK: duración, bloqueo entre navegadores, recargas, pago, cancelación, ambos vencimientos, móvil y fallo de API.",

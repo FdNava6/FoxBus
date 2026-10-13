@@ -40,6 +40,12 @@ export async function hostedCheckout(
   config,
   request = fetch,
 ) {
+  if (store.pilotMode)
+    fail(
+      403,
+      "PILOT_REAL_PAYMENTS_DISABLED",
+      "El piloto no abre sitios de pago reales.",
+    );
   let reservation = store.getReservation(code, owner);
   if (reservation.status !== "pending_payment")
     fail(

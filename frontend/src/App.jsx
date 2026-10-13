@@ -38,6 +38,7 @@ const Policies = lazy(() => import("./pages/Policies"));
 const TicketPage = lazy(() => import("./pages/TicketPage"));
 const ReservationReceipt = lazy(() => import("./pages/ReservationReceipt"));
 const Help = lazy(() => import("./pages/Help"));
+const PilotGuide = lazy(() => import("./pages/PilotGuide"));
 import { useAuthStore } from "./store/useAuthStore";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import ScrollToTop from "./components/common/ScrollToTop";
@@ -88,6 +89,7 @@ function App() {
                   element={<ReservationReceipt />}
                 />
                 <Route path="/ayuda" element={<Help />} />
+                <Route path="/piloto" element={<PilotGuide />} />
               </Route>
 
               {/* ---------- Autenticación ---------- */}

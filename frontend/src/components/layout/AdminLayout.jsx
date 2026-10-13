@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "../admin/Sidebar";
 import { useAuthStore } from "../../store/useAuthStore";
+import EnvironmentNotice from "../common/EnvironmentNotice";
 export default function AdminLayout() {
   const [open, setOpen] = useState(false),
     user = useAuthStore((s) => s.user);
@@ -35,6 +36,7 @@ export default function AdminLayout() {
           <p className="font-bold">Operación FOXbus</p>
           <p className="text-sm">{user?.role}</p>
         </header>
+        <EnvironmentNotice />
         <main className="p-4 lg:p-6">
           <Outlet />
         </main>

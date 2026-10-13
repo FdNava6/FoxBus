@@ -20,6 +20,11 @@ import {
 import { AuthStore } from "./auth.js";
 import { startExpirationJob } from "./jobs/expire-reservations.js";
 import { startNotificationJob } from "./jobs/notifications.js";
+import {
+  runtimeConfig,
+  bindDatabaseMode,
+  pilotReport,
+} from "./runtime-config.js";
 
 async function readBody(req) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
@@ -94,7 +99,19 @@ export function createApi({
   trustProxy = false,
   checkout = {},
   checkoutFetch = fetch,
+  pilotMode = false,
 }) {
+  bindDatabaseMode(
+    store,
+    pilotMode ? "pilot" : secureCookies ? "production" : "development",
+  );
+  if (pilotMode) {
+    demoPayments = true;
+    devMailbox = true;
+    mailConfigured = false;
+    paymentSecret = "";
+    checkout = {};
+  }
   const auth = new AuthStore(store),
     limit = rateLimiter();
   const staff = ["admin", "agent", "finance"];
@@ -109,6 +126,7 @@ export function createApi({
   const decorate = (r) => ({
     ...r,
     payment_mode: demoPayments ? "demo" : "provider_only",
+    simulation: pilotMode || demoPayments,
   });
   const cookie = (token) =>
     `foxbus_session=${token}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=${token ? 604800 : 0}${secureCookies ? "; Secure" : ""}`;
@@ -170,6 +188,7 @@ export function createApi({
       const policy = store.policy();
       if (
         secureCookies &&
+        !pilotMode &&
         (path === "/api/reservations/sessions" ||
           path.endsWith("/confirm") ||
           path === "/api/staff/counter") &&
@@ -189,13 +208,39 @@ export function createApi({
           );
         return owner;
       };
-      const body = async () => (await readBody(req)).body;
+      const body = async () => {
+        const data = (await readBody(req)).body;
+        if (pilotMode)
+          for (const email of [data.email, data.contact?.email])
+            if (
+              email !== undefined &&
+              !/^[^@\s]+@example\.test$/i.test(String(email))
+            )
+              fail(
+                400,
+                "PILOT_TEST_DATA_REQUIRED",
+                "En el piloto usa un correo ficticio @example.test y datos de prueba.",
+              );
+        return data;
+      };
       let result;
       if (method === "GET" && path === "/api/health") {
         const p = store.policy();
         result = {
           status: "ok",
           payment_mode: demoPayments ? "demo" : "provider_only",
+          app_mode: pilotMode
+            ? "pilot"
+            : secureCookies
+              ? "production"
+              : "development",
+          pilot: pilotMode
+            ? {
+                realPayments: false,
+                externalMail: false,
+                fictionalDataOnly: true,
+              }
+            : null,
           dev_mailbox: devMailbox,
           readiness: {
             operatorConfigured: Boolean(
@@ -211,7 +256,7 @@ export function createApi({
             .all(),
         };
       } else if (method === "GET" && path === "/api/policies")
-        result = store.policy();
+        result = { ...store.policy(), simulation: pilotMode || demoPayments };
       else if (method === "GET" && path === "/api/trips/catalog")
         result = store.catalog();
       else if (method === "GET" && path === "/api/trips/search")
@@ -249,6 +294,12 @@ export function createApi({
         const data = await body();
         result = auth.reset(data.token, data.password);
       } else if (method === "POST" && path === "/api/internal/payments") {
+        if (pilotMode)
+          fail(
+            403,
+            "PILOT_REAL_PAYMENTS_DISABLED",
+            "El piloto solo admite pagos simulados; no recibe cobros bancarios.",
+          );
         const data = await readBody(req);
         verifyPayment(req, data.raw, paymentSecret, store.clock);
         result = decorate(
@@ -303,9 +354,35 @@ export function createApi({
           /^\/api\/staff\/financial\/[^/]+$/.test(path)
         ) {
           auth.require(user, ["admin", "finance"]);
+          const data = await body();
+          if (pilotMode && data.simulate !== true)
+            fail(
+              403,
+              "PILOT_SIMULATION_REQUIRED",
+              "Confirma que es una devolución simulada; no se devuelve dinero real.",
+            );
+          if (
+            pilotMode &&
+            (typeof data.reference !== "string" ||
+              data.reference.length < 8 ||
+              data.reference.length > 120 ||
+              typeof data.response !== "string" ||
+              data.response.length < 10)
+          )
+            fail(
+              400,
+              "INVALID_REFUND",
+              "Incluye una referencia ficticia válida y un detalle de al menos 10 caracteres.",
+            );
           result = store.resolveFinancialCase(
             path.split("/")[4],
-            await body(),
+            pilotMode
+              ? {
+                  ...data,
+                  reference: "pilot-refund-" + data.reference,
+                  response: "SIMULACIÓN SIN DINERO: " + data.response,
+                }
+              : data,
             actor,
           );
         } else if (method === "POST" && path === "/api/staff/check-in") {
@@ -370,6 +447,10 @@ export function createApi({
               )
               .get().count,
           };
+        } else if (method === "GET" && path === "/api/staff/pilot-report") {
+          auth.require(user, ["admin"]);
+          if (!pilotMode) fail(404, "NOT_FOUND", "Ruta no encontrada.");
+          result = pilotReport(store);
         } else if (method === "POST" && path === "/api/staff/counter") {
           auth.require(user, staff);
           const data = await body();
@@ -387,17 +468,38 @@ export function createApi({
         } else if (method === "POST" && path === "/api/staff/payments") {
           auth.require(user, ["admin", "finance"]);
           const data = await body();
+          if (pilotMode && data.simulate !== true)
+            fail(
+              403,
+              "PILOT_SIMULATION_REQUIRED",
+              "Confirma que es un pago de caja simulado; no recibas efectivo real.",
+            );
+          if (
+            pilotMode &&
+            (typeof data.reference !== "string" ||
+              data.reference.length < 8 ||
+              data.reference.length > 120)
+          )
+            fail(
+              400,
+              "INVALID_PAYMENT",
+              "Incluye una referencia ficticia válida de 8 a 120 caracteres.",
+            );
           if (data.verified !== true || data.method !== "cash")
             fail(
               400,
               "VERIFICATION_REQUIRED",
               "Solo admite caja con efectivo verificado. Pagos bancarios usan el adaptador.",
             );
-          result = store.recordPayment(data.code, {
-            reference: data.reference,
-            amountCents: data.amountCents,
-            mode: "counter",
-          });
+          result = decorate(
+            store.recordPayment(data.code, {
+              reference: pilotMode
+                ? "pilot-counter-" + data.reference
+                : data.reference,
+              amountCents: data.amountCents,
+              mode: pilotMode ? "demo" : "counter",
+            }),
+          );
         } else fail(404, "NOT_FOUND", "Ruta no encontrada.");
       } else if (method === "POST" && path === "/api/reservations/recovery")
         result = store.requestRecovery(await body());
@@ -429,6 +531,7 @@ export function createApi({
               supportPhone: policy.supportPhone,
               supportHours: policy.supportHours,
               demo: demoPayments,
+              simulation: pilotMode || demoPayments,
             };
           } else if (method === "POST" && action === "start-checkout") {
             await body();
@@ -461,6 +564,7 @@ export function createApi({
             result = await Promise.all(
               store.ticketsFor(code, owner).map(async (t) => ({
                 ...t,
+                simulation: pilotMode || demoPayments,
                 qrSvg: await QRCode.toString(t.qrText, {
                   type: "svg",
                   errorCorrectionLevel: "M",
@@ -497,50 +601,50 @@ export function createApi({
     }
   });
 }
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
-  const store = new OperationsStore(
-    process.env.DATABASE_PATH || "./data/foxbus.sqlite",
-    { publicUrl: process.env.PUBLIC_URL || "http://localhost:5173" },
-  );
-  if (
-    process.env.SEED_DEMO_DATA === "true" &&
-    process.env.NODE_ENV !== "production"
-  )
-    store.seedDemoSchedule();
+export function startServer(env = process.env) {
+  const config = runtimeConfig(env);
+  const store = new OperationsStore(config.databasePath, {
+    publicUrl: env.PUBLIC_URL || "http://localhost:5173",
+  });
+  try {
+    bindDatabaseMode(store, config.mode);
+  } catch (error) {
+    store.close();
+    throw error;
+  }
+  if (config.seedDemoData) store.seedDemoSchedule();
   const stopJob = startExpirationJob(store, {
-    intervalMs: Number(process.env.EXPIRATION_JOB_INTERVAL_MS || 1000),
+    intervalMs: Number(env.EXPIRATION_JOB_INTERVAL_MS || 1000),
   });
   const stopMail = startNotificationJob(store, {
-    endpoint: process.env.MAIL_WEBHOOK_URL || "",
-    apiKey: process.env.MAIL_API_KEY || "",
+    endpoint: env.MAIL_WEBHOOK_URL || "",
+    apiKey: env.MAIL_API_KEY || "",
   });
   const server = createApi({
     store,
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
-    demoPayments:
-      process.env.DEMO_PAYMENTS === "true" &&
-      process.env.NODE_ENV !== "production",
-    paymentSecret: process.env.PAYMENT_WEBHOOK_SECRET || "",
-    secureCookies: process.env.NODE_ENV === "production",
-    devMailbox:
-      process.env.DEV_MAILBOX === "true" &&
-      process.env.NODE_ENV !== "production",
-    mailConfigured: Boolean(process.env.MAIL_WEBHOOK_URL),
-    trustProxy: process.env.TRUST_PROXY === "true",
+    origin: env.FRONTEND_ORIGIN || "http://localhost:5173",
+    pilotMode: config.pilotMode,
+    demoPayments: config.demoPayments,
+    paymentSecret: env.PAYMENT_WEBHOOK_SECRET || "",
+    secureCookies: config.secureCookies,
+    devMailbox: config.devMailbox,
+    mailConfigured: Boolean(env.MAIL_WEBHOOK_URL),
+    trustProxy: env.TRUST_PROXY === "true",
     checkout: {
-      endpoint: process.env.PAYMENT_CHECKOUT_URL || "",
-      token: process.env.PAYMENT_CHECKOUT_TOKEN || "",
-      hosts: (process.env.PAYMENT_CHECKOUT_HOSTS || "")
+      endpoint: env.PAYMENT_CHECKOUT_URL || "",
+      token: env.PAYMENT_CHECKOUT_TOKEN || "",
+      hosts: (env.PAYMENT_CHECKOUT_HOSTS || "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
     },
   });
-  server.listen(Number(process.env.PORT || 8080), () =>
-    console.log("FOXbus: API, inventario y jobs activos."),
+  server.listen(Number(env.PORT || 8080), config.host, () =>
+    console.log(
+      config.pilotMode
+        ? "FOXbus: piloto local SIN COBROS; datos y boletos de prueba. Base separada y correo externo desactivado."
+        : "FOXbus: API, inventario y jobs activos.",
+    ),
   );
   for (const signal of ["SIGINT", "SIGTERM"])
     process.on(signal, () => {
@@ -551,4 +655,7 @@ if (
         process.exit(0);
       });
     });
+  return { server, store, stopJob, stopMail };
 }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  startServer();

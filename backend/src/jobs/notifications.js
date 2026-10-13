@@ -4,6 +4,8 @@ export async function deliverNotifications(
   store,
   { endpoint = "", apiKey = "", fetchImpl = fetch } = {},
 ) {
+  if (store.pilotMode)
+    return { configured: false, delivered: 0, mode: "pilot" };
   if (!endpoint) return { configured: false, delivered: 0 };
   if (!endpoint.startsWith("https://"))
     throw new Error("MAIL_WEBHOOK_URL debe usar HTTPS.");

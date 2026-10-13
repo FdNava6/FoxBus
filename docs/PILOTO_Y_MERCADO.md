@@ -4,6 +4,8 @@ Este documento define trabajo pendiente con personas reales. No presenta entrevi
 
 ## Cliente y propuesta a comprobar
 
+Antes de una operación comercial puede ejecutarse [el piloto funcional sin dinero](PILOTO_SIN_COBROS.md). Sus resultados de usabilidad no sustituyen entrevistas, acuerdos del operador ni evidencia de mercado.
+
 Hipótesis inicial: una empresa de transporte con una ruta piloto compra una herramienta que reduce gestiones repetidas y mejora la continuidad entre venta, abordaje y posventa. El pasajero obtiene información y atención; el operador debe obtener un beneficio que justifique pagar e integrar la herramienta.
 
 Contrastar esa hipótesis con la alternativa de vender directamente al viajero o de ofrecer una plataforma a varias empresas. No desarrollar una expansión nacional antes de validar quién paga, qué problema prioriza y qué integración necesita.

@@ -6,6 +6,11 @@
     "node": ">=24.0.0"
   },
   "scripts": {
+    "pilot": "node --env-file-if-exists=.env.pilot src/pilot.js",
+    "pilot:admin": "node --env-file-if-exists=.env.pilot src/pilot.js admin",
+    "pilot:doctor": "node --env-file-if-exists=.env.pilot src/pilot.js doctor",
+    "pilot:report": "node --env-file-if-exists=.env.pilot src/pilot.js pilot-report",
+    "pilot:backup": "node --env-file-if-exists=.env.pilot src/pilot.js backup",
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "node --env-file-if-exists=.env --watch src/server.js",
     "test": "node --test",

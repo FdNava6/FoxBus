@@ -47,7 +47,13 @@ export default function PaymentOptions({ reservation }) {
         <p>Cargando formas de pago…</p>
       ) : (
         <>
-          {options.onlineAvailable ? (
+          {options.simulation ? (
+            <p className="rounded-lg bg-blue-50 p-3 text-blue-950">
+              Solo pagos de prueba. Usa “Simular pago” para completar el
+              recorrido; no ingreses tarjetas, no transfieras dinero ni
+              entregues efectivo. Los boletos resultantes no permiten viajar.
+            </p>
+          ) : options.onlineAvailable ? (
             <>
               <Button disabled={busy} onClick={pay}>
                 {busy ? "Abriendo pago seguro…" : "Pagar online"}
@@ -60,7 +66,7 @@ export default function PaymentOptions({ reservation }) {
           ) : (
             <p>El pago online no está habilitado para esta reserva.</p>
           )}
-          {options.instructions && (
+          {!options.simulation && options.instructions && (
             <div className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3">
               <h4 className="mb-2 font-semibold">
                 Otros medios publicados por el operador
@@ -68,18 +74,23 @@ export default function PaymentOptions({ reservation }) {
               {options.instructions}
             </div>
           )}
-          {!options.instructions && !options.onlineAvailable && (
-            <p>
-              No hay un medio de pago real publicado. No envíes dinero a cuentas
-              no verificadas.
+          {!options.simulation &&
+            !options.instructions &&
+            !options.onlineAvailable && (
+              <p>
+                No hay un medio de pago real publicado. No envíes dinero a
+                cuentas no verificadas.
+              </p>
+            )}
+          {!options.simulation && <OperatorContact policy={options} compact />}
+          {!options.simulation && (
+            <p className="text-sm text-gray-600">
+              Incluye tu código de reserva. Guarda el comprobante y espera el
+              estado “Pagado”; enviar una captura no confirma el pago. Si ya
+              pagaste y no se actualiza, contacta al operador antes de
+              repetirlo.
             </p>
           )}
-          <OperatorContact policy={options} compact />
-          <p className="text-sm text-gray-600">
-            Incluye tu código de reserva. Guarda el comprobante y espera el
-            estado “Pagado”; enviar una captura no confirma el pago. Si ya
-            pagaste y no se actualiza, contacta al operador antes de repetirlo.
-          </p>
           {options.demo && (
             <p className="text-sm text-blue-800">
               Modo de prueba: “Simular pago” no cobra dinero.

@@ -6,18 +6,29 @@ import { AuthStore } from "./auth.js";
 import { operatorReady, checkoutConfigured } from "./passenger-experience.js";
 import { encryptBackup } from "./backup-crypto.js";
 import { randomUUID } from "node:crypto";
+import {
+  runtimeConfig,
+  bindDatabaseMode,
+  pilotReport,
+} from "./runtime-config.js";
 const command = process.argv[2],
-  path = resolve(process.env.DATABASE_PATH || "./data/foxbus.sqlite");
+  config = runtimeConfig(),
+  path = config.databasePath;
 const store = new OperationsStore(path, {
   publicUrl: process.env.PUBLIC_URL || "http://localhost:5173",
 });
 try {
+  bindDatabaseMode(store, config.mode);
   if (command === "admin") {
     const email = process.env.FOXBUS_ADMIN_EMAIL,
       password = process.env.FOXBUS_ADMIN_PASSWORD;
     if (!email || !password)
       throw new Error(
         "Define FOXBUS_ADMIN_EMAIL y FOXBUS_ADMIN_PASSWORD en el entorno privado (contraseña >=12 caracteres).",
+      );
+    if (config.pilotMode && !/^[^@\s]+@example\.test$/i.test(email))
+      throw new Error(
+        "Usa una cuenta ficticia @example.test para el personal del piloto.",
       );
     new AuthStore(store).register(
       {
@@ -32,7 +43,7 @@ try {
     );
   } else if (command === "backup") {
     const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY;
-    if (process.env.NODE_ENV === "production" && !encryptionKey)
+    if (config.mode === "production" && !encryptionKey)
       throw new Error(
         "Configura BACKUP_ENCRYPTION_KEY antes de copiar datos productivos.",
       );
@@ -93,6 +104,9 @@ try {
       JSON.stringify(
         {
           operatorConfigured: operatorReady(policy),
+          appMode: config.mode,
+          realPaymentsAllowed: !config.pilotMode && !config.demoPayments,
+          externalMailAllowed: !config.pilotMode,
           hostedCheckoutConfigured: checkoutConfigured({
             endpoint: process.env.PAYMENT_CHECKOUT_URL,
             token: process.env.PAYMENT_CHECKOUT_TOKEN,
@@ -104,10 +118,12 @@ try {
           mailConfigured: Boolean(process.env.MAIL_WEBHOOK_URL),
           paymentAdapterConfigured: Boolean(process.env.PAYMENT_WEBHOOK_SECRET),
           demoFlagsEnabled: [
-            "DEMO_PAYMENTS",
-            "DEV_MAILBOX",
-            "SEED_DEMO_DATA",
-          ].filter((k) => process.env[k] === "true"),
+            ["DEMO_PAYMENTS", config.demoPayments],
+            ["DEV_MAILBOX", config.devMailbox],
+            ["SEED_DEMO_DATA", config.seedDemoData],
+          ]
+            .filter(([, enabled]) => enabled)
+            .map(([flag]) => flag),
           jobs,
           integrity: store.db.prepare("PRAGMA integrity_check").get(),
         },
@@ -115,6 +131,8 @@ try {
         2,
       ),
     );
+  } else if (command === "pilot-report") {
+    console.log(JSON.stringify(pilotReport(store), null, 2));
   } else if (command === "retention-report") {
     const days = store.policy().retentionDays;
     if (!days)
@@ -138,7 +156,10 @@ try {
         2,
       ),
     );
-  } else throw new Error("Comandos: admin, backup, doctor, retention-report.");
+  } else
+    throw new Error(
+      "Comandos: admin, backup, doctor, pilot-report, retention-report.",
+    );
 } finally {
   store.close();
 }

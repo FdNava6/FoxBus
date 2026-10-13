@@ -10,6 +10,7 @@ import TripSummary from "../components/common/TripSummary";
 import ReservationCode from "../components/common/ReservationCode";
 import OperatorContact from "../components/common/OperatorContact";
 import Button from "../components/common/Button";
+import SimulationNotice from "../components/common/SimulationNotice";
 export default function ReservationReceipt() {
   const { code } = useParams(),
     [reservation, setReservation] = useState(null),
@@ -76,6 +77,9 @@ export default function ReservationReceipt() {
             </p>
           </TripSummary>
           <section className="space-y-4 rounded-2xl bg-white p-6">
+            {(reservation.simulation || reservation.trip.isDemo) && (
+              <SimulationNotice />
+            )}
             <ReservationCode code={code} />
             {["pending", "sending", "failed"].includes(
               reservation.confirmationEmailStatus,
@@ -96,9 +100,15 @@ export default function ReservationReceipt() {
             ))}
             <OperatorContact policy={policy} />
             <p className="text-sm">
-              Este documento identifica tu reserva; no sustituye un comprobante
-              tributario. Solo un boleto emitido tras verificar el pago permite
-              abordar.
+              {reservation.simulation || reservation.trip.isDemo ? (
+                "Esta reserva, su pago y sus boletos son simulaciones sin servicio real."
+              ) : (
+                <>
+                  Este documento identifica tu reserva; no sustituye un
+                  comprobante tributario. Solo un boleto emitido tras verificar
+                  el pago permite abordar.
+                </>
+              )}
             </p>
             <div data-print-hide className="flex flex-wrap gap-3">
               <Button onClick={() => window.print()}>

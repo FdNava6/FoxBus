@@ -4,6 +4,8 @@ Backend Node.js 24 LTS + SQLite, con migraciones versionadas y datos persistente
 
 ## Desarrollo local
 
+Para el piloto sin cobros: `npm run pilot`, con base independiente y sin cargar `.env` de ventas. `npm run pilot:admin`, `pilot:doctor`, `pilot:report` y `pilot:backup` administran únicamente ese piloto. Leer [puesta en marcha y protocolo](../docs/PILOTO_SIN_COBROS.md). Nunca convertir la base del piloto en producción ni copiarle credenciales de pagos/correo.
+
 Desde backend: copiar .env.example a .env y ejecutar npm ci y npm start. En PowerShell: Copy-Item .env.example .env. Desde frontend: npm ci y npm run dev.
 
 El ejemplo habilita salidas de muestra para siete días, pago sin cobro y buzón local. Estas opciones se desactivan con NODE_ENV=production. Consultar /api/health para conocer configuración y estado de jobs. Una salida se publica explícitamente: buscar una fecha no crea viajes.

@@ -57,10 +57,13 @@ jobs:
         run: |
           npm ci --prefix ../backend
           npm run test:e2e
+          npm run test:pilot
 
       - name: Booking screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: booking-flow-screenshots
-          path: frontend/test-results/reservation-flow
+          path: |
+            frontend/test-results/reservation-flow
+            frontend/test-results/pilot-flow

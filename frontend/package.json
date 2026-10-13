@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "node --test",
     "test:e2e": "node e2e/reservation-flow.mjs",
+    "test:pilot": "node e2e/pilot-flow.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

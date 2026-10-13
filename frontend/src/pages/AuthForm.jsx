@@ -5,6 +5,7 @@ import { operationsService } from "../services/operationsService";
 import { useAuthStore } from "../store/useAuthStore";
 import { bookingErrorMessage } from "../services/reservationService";
 import Button from "../components/common/Button";
+import EnvironmentNotice from "../components/common/EnvironmentNotice";
 
 export default function AuthForm({ register = false }) {
   const navigate = useNavigate(),
@@ -56,6 +57,7 @@ export default function AuthForm({ register = false }) {
   return (
     <main className="grid min-h-screen place-items-center bg-gray-50 p-4">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
+        <EnvironmentNotice />
         <Link to="/" className="font-bold text-fox-pink">
           FOXbus
         </Link>

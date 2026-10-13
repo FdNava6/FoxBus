@@ -2,6 +2,8 @@
 
 ## Cobertura de la revisión
 
+El grupo eligió primero un [piloto sin cobros reales](PILOTO_SIN_COBROS.md), separado de cualquier activación comercial. Su base no se puede convertir en producción; estos pendientes externos siguen aplicando a ventas reales.
+
 | Punto | Implementado | Activación/validación externa pendiente |
 | --- | --- | --- |
 | Salidas | Calendario explícito, bloqueo de fechas pasadas y cierre anticipado | Cargar salidas, terminales, tarifas y vehículos reales |

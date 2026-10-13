@@ -66,6 +66,10 @@ export class BookingStore {
         throw error;
       }
     }
+    this.pilotMode =
+      this.db
+        .prepare("SELECT value FROM operator_settings WHERE key='runtime_mode'")
+        .get()?.value === "pilot";
   }
   close() {
     this.db.close();
@@ -727,6 +731,12 @@ export class BookingStore {
     code,
     { reference, amountCents, occurredAt, mode = "provider", owner = null },
   ) {
+    if (this.pilotMode && mode !== "demo")
+      fail(
+        403,
+        "PILOT_REAL_PAYMENTS_DISABLED",
+        "El piloto solo registra pagos simulados.",
+      );
     if (typeof code !== "string" || code.length > 80)
       fail(400, "INVALID_RESERVATION_CODE", "Código de reserva inválido.");
     if (
