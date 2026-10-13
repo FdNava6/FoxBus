@@ -18,7 +18,8 @@ export default function AuthForm({ register = false }) {
   const [accepted, setAccepted] = useState(false),
     [policy, setPolicy] = useState(null),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
     operationsService
       .policy()
@@ -56,14 +57,14 @@ export default function AuthForm({ register = false }) {
     <main className="grid min-h-screen place-items-center bg-gray-50 p-4">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
         <Link to="/" className="font-bold text-fox-pink">
-          FOXTRIP
+          FOXbus
         </Link>
         <h1 className="my-5 text-2xl font-bold">
           {register ? "Crea tu cuenta" : "Inicia sesión"}
         </h1>
         <p className="mb-5 text-sm text-gray-600">
-          Consulta tus reservas desde cualquier dispositivo. El personal utiliza
-          cuentas autorizadas.
+          Consulta tus reservas desde cualquier dispositivo. También puedes
+          reservar sin crear una cuenta.
         </p>
         {error && (
           <p role="alert" className="mb-4 text-red-700">
@@ -90,7 +91,7 @@ export default function AuthForm({ register = false }) {
               <input
                 className="input"
                 id={name}
-                type={type}
+                type={type === "password" && showPassword ? "text" : type}
                 value={form[name]}
                 minLength={type === "password" ? 12 : undefined}
                 maxLength={type === "password" ? 128 : 150}
@@ -108,6 +109,13 @@ export default function AuthForm({ register = false }) {
               />
             </div>
           ))}
+          <button
+            type="button"
+            className="min-h-11 text-sm text-fox-pink underline"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+          </button>
           <p className="text-xs text-gray-500">
             Contraseña: al menos 12 caracteres.
           </p>
@@ -148,10 +156,16 @@ export default function AuthForm({ register = false }) {
           </Link>
         </p>
         <Link
-          to="/recuperar"
+          to="/recuperar?mode=account"
           className="mt-3 block text-sm text-fox-pink underline"
         >
-          Recuperar acceso o reserva
+          Olvidé mi contraseña
+        </Link>
+        <Link
+          to="/resultados"
+          className="mt-4 block text-sm text-fox-pink underline"
+        >
+          Continuar sin cuenta y buscar viajes
         </Link>
       </section>
     </main>

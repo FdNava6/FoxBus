@@ -626,6 +626,11 @@ export default function OperationsConsole() {
                       service: form.routeService,
                       durationMinutes: Number(form.routeDuration),
                       priceCents: Math.round(Number(form.routePrice) * 100),
+                      serviceDescription: form.routeDescription || "",
+                      features: String(form.routeFeatures || "")
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
                     }),
                   );
                 }}
@@ -664,6 +669,22 @@ export default function OperationsConsole() {
                   value={form.routePrice}
                   onChange={(v) => change("routePrice", v)}
                 />
+                <Field
+                  label="Descripción del servicio"
+                  required={false}
+                  value={form.routeDescription}
+                  onChange={(v) => change("routeDescription", v)}
+                />
+                <Field
+                  label="Servicios incluidos (separados por comas)"
+                  required={false}
+                  value={form.routeFeatures}
+                  onChange={(v) => change("routeFeatures", v)}
+                />
+                <p className="text-sm">
+                  Publica únicamente características verificadas para este
+                  servicio. No se agregan servicios de ejemplo.
+                </p>
                 <Button disabled={busy}>Crear ruta y tarifa</Button>
               </form>
             </>
@@ -826,6 +847,33 @@ export default function OperationsConsole() {
                 onChange={(v) => change("response", v)}
               />
               <Button disabled={busy}>Registrar comprobante</Button>
+              <hr className="my-4" />
+              <Field
+                label="Fecha estimada de solución (hora de Perú)"
+                type="datetime-local"
+                required={false}
+                value={form.expectedResolution}
+                onChange={(v) => change("expectedResolution", v)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy || !form.expectedResolution || !form.response}
+                onClick={() =>
+                  run(() =>
+                    operationsService.staffPut(
+                      "financial/" + selected.id + "/estimate",
+                      {
+                        expectedResolutionAt:
+                          form.expectedResolution + ":00-05:00",
+                        response: form.response,
+                      },
+                    ),
+                  )
+                }
+              >
+                Comunicar fecha estimada sin registrar reintegro
+              </Button>
             </form>
           )}
         </>
@@ -878,11 +926,23 @@ export default function OperationsConsole() {
               operationsService.staffPut("policies", {
                 ...policy,
                 ...form,
-                baggageKg: form.baggageKg
-                  ? Number(form.baggageKg)
+                serviceResponseHours: Object.hasOwn(
+                  form,
+                  "serviceResponseHours",
+                )
+                  ? form.serviceResponseHours === ""
+                    ? null
+                    : Number(form.serviceResponseHours)
+                  : policy.serviceResponseHours,
+                baggageKg: Object.hasOwn(form, "baggageKg")
+                  ? form.baggageKg === ""
+                    ? null
+                    : Number(form.baggageKg)
                   : policy.baggageKg,
-                retentionDays: form.retentionDays
-                  ? Number(form.retentionDays)
+                retentionDays: Object.hasOwn(form, "retentionDays")
+                  ? form.retentionDays === ""
+                    ? null
+                    : Number(form.retentionDays)
                   : policy.retentionDays,
               }),
             );
@@ -895,6 +955,17 @@ export default function OperationsConsole() {
             ["address", "Domicilio"],
             ["supportEmail", "Correo de atención"],
             ["supportPhone", "Teléfono de atención"],
+            ["supportHours", "Horario de atención"],
+            [
+              "paymentInstructions",
+              "Medios de pago e instrucciones verificadas",
+            ],
+            ["changePolicy", "Condiciones de cambios"],
+            ["refundPolicy", "Condiciones de devoluciones"],
+            [
+              "serviceResponseHours",
+              "Primera respuesta a solicitudes (horas calendario)",
+            ],
             ["baggageKg", "Franquicia de equipaje (kg)"],
             ["retentionDays", "Conservación propuesta (días)"],
           ].map(([key, label]) => (

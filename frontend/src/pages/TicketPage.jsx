@@ -4,10 +4,19 @@ import { operationsService } from "../services/operationsService";
 import { bookingErrorMessage } from "../services/reservationService";
 import { formatDeadline, tripDuration } from "../utils/bookingTime";
 import Button from "../components/common/Button";
+import { Terminal } from "../components/common/TripSummary";
+import OperatorContact from "../components/common/OperatorContact";
 export default function TicketPage() {
   const { code } = useParams(),
     [tickets, setTickets] = useState([]),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [policy, setPolicy] = useState(null);
+  useEffect(() => {
+    operationsService
+      .policy()
+      .then(setPolicy)
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     operationsService
       .tickets(code)
@@ -36,9 +45,19 @@ export default function TicketPage() {
           <p className="font-bold">Asiento {t.seat}</p>
           <p>Salida: {formatDeadline(t.trip.departure_at)} (Perú)</p>
           <p>Presentación: {formatDeadline(t.trip.boarding_at)}</p>
-          <p>Terminal: {t.trip.terminalOrigin}</p>
-          <p>Llegada: {t.trip.terminalDestination}</p>
+          <Terminal
+            name={t.trip.terminalOrigin}
+            isDemo={t.trip.isDemo}
+            label="Terminal de salida"
+          />
+          <Terminal
+            name={t.trip.terminalDestination}
+            isDemo={t.trip.isDemo}
+            label="Terminal de llegada"
+          />
+          <p>Llegada estimada: {formatDeadline(t.trip.arrival_at)} (Perú)</p>
           <p>{tripDuration(t.trip)}</p>
+          <OperatorContact policy={policy} compact />
           <img
             className="h-44 w-44"
             alt={"Código QR del boleto para " + t.name}

@@ -20,9 +20,9 @@
 1. Usar Node 24 LTS y los archivos package-lock: npm ci en backend y frontend.
 2. Respaldar la base anterior antes de migrar. Las migraciones preservan reservas y registros de pago; los datos antiguos incompletos requieren revisión del operador antes de emitir boletos.
 3. Crear la primera cuenta admin desde el entorno privado con npm run admin; no hay cuentas o contraseñas predeterminadas.
-4. Configurar empresa, RUC, domicilio y contacto en Operador y políticas.
+4. Configurar empresa, RUC, domicilio, contactos/horario, equipaje, medios de pago, condiciones de cambios/devoluciones y plazo de primera respuesta en Operador y políticas. Publicar únicamente datos verificados y condiciones aprobadas.
 5. Crear rutas/tarifas y publicar vehículos y salidas; verificar terminales, fechas en hora de Perú y disponibilidad física. Una tarifa nueva no modifica reservas existentes. El mapa básico de la UI es rectangular y permite bloquear asientos fuera de servicio; la API admite configuraciones personalizadas.
-6. Conectar adaptadores de correo/pago, poner flags demo en false y ejecutar npm run doctor.
+6. Conectar adaptadores de correo/pago, poner flags demo en false y ejecutar npm run doctor. Para el botón de pago online configurar checkout HTTPS y dominios permitidos según [el contrato del pasajero](PASSENGER_EXPERIENCE.md).
 7. Desplegar con volumen persistente y HTTPS. Compose escucha frontend solo en 127.0.0.1:8088 para colocarlo detrás de un proxy TLS. No publicar el backend directamente ni habilitar TRUST_PROXY ante clientes no confiables.
 8. Configurar monitor externo de /api/health y alertas por jobs atrasados, errores y correo fallido. El panel muestra la salud; no se ha conectado una plataforma externa de alertas.
 9. Programar copias cifradas, conservarlas fuera del servidor y ensayar restauración. Nunca sustituir la base activa sin una validación y ventana de mantenimiento.

@@ -7,6 +7,7 @@ import {
 } from "../services/reservationService";
 import useCountdown from "./useCountdown";
 import { ROUTES } from "../utils/constants";
+import { clearDraft } from "../utils/bookingDraft";
 
 export default function useBookingSession({ start = false } = {}) {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function useBookingSession({ start = false } = {}) {
   );
   const expire = useCallback(() => {
     leaving.current = true;
+    if (code) clearDraft(code);
     clearCart();
     navigate(ROUTES.SEARCH, {
       replace: true,
@@ -34,7 +36,7 @@ export default function useBookingSession({ start = false } = {}) {
           "La sesión de 10 minutos terminó. Tus asientos se liberaron; selecciona nuevamente un viaje.",
       },
     });
-  }, [clearCart, navigate, trip]);
+  }, [clearCart, navigate, trip, code]);
   const leave = useCallback(
     (route) => {
       leaving.current = true;

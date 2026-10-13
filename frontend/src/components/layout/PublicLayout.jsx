@@ -41,9 +41,9 @@ export default function PublicLayout() {
       <EnvironmentNotice />
 
       {/* Contenido de la ruta actual */}
-      <main className="flex-1">
+      <div className="flex-1">
         <Outlet />
-      </main>
+      </div>
 
       <Footer />
 

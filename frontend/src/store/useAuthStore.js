@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { userService } from "../services/userService";
 import { useCartStore } from "./useCartStore";
+import { resetBookingClient } from "../utils/bookingClient";
+import { clearAllDrafts } from "../utils/bookingDraft";
 let authVersion = 0;
 export const useAuthStore = create((set) => ({
   user: null,
@@ -51,9 +53,14 @@ export const useAuthStore = create((set) => ({
     await userService.logout();
     authVersion++;
     useCartStore.getState().clearCart();
-    localStorage.removeItem("foxbus_booking_client");
-    localStorage.removeItem("foxbus_token");
-    localStorage.removeItem("foxbus_user");
+    clearAllDrafts();
+    resetBookingClient();
+    try {
+      localStorage.removeItem("foxbus_token");
+      localStorage.removeItem("foxbus_user");
+    } catch {
+      /* El cierre de sesión no depende del almacenamiento del navegador. */
+    }
     set({
       user: null,
       isAuthenticated: false,

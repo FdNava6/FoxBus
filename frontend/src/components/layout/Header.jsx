@@ -1,6 +1,6 @@
 // ============================================
 // Header.jsx
-// Barra de navegación superior de FOXTRIP.
+// Barra de navegación superior de FOXbus.
 // En escritorio (md+) los enlaces del pasajero se
 // muestran directamente en la barra; en móvil se
 // agrupan en una hamburguesa que abre un menú
@@ -49,11 +49,11 @@ export default function Header() {
         <Link to={ROUTES.HOME} className="flex items-center gap-2">
           <img
             src={FOXLogo}
-            alt="FOXTRIP"
+            alt="FOXbus"
             className="h-10 w-10 rounded-xl object-contain"
           />
           <span className="font-display text-2xl font-bold text-gray-800">
-            FOX<span className="text-fox-pink">TRIP</span>
+            FOX<span className="text-fox-pink">bus</span>
           </span>
         </Link>
 
@@ -141,10 +141,10 @@ export default function Header() {
                 <span className="flex items-center gap-2 font-display text-lg font-bold text-gray-800">
                   <img
                     src={FOXLogo}
-                    alt="FOXTRIP"
+                    alt="FOXbus"
                     className="h-8 w-8 rounded-lg object-contain"
                   />
-                  FOX<span className="text-fox-pink">TRIP</span>
+                  FOX<span className="text-fox-pink">bus</span>
                 </span>
                 <button
                   onClick={closeMenu}

@@ -10,6 +10,12 @@ import {
   bookingErrorMessage,
   reservationService,
 } from "../services/reservationService";
+import { readDraft, saveDraft, clearDraft } from "../utils/bookingDraft";
+import ConfirmDialog from "../components/common/ConfirmDialog";
+import ReservationCode from "../components/common/ReservationCode";
+import PaymentOptions from "../components/common/PaymentOptions";
+import TripSummary from "../components/common/TripSummary";
+import ServiceDetails from "../components/common/ServiceDetails";
 import { operationsService } from "../services/operationsService";
 import { formatCurrency } from "../utils/helpers";
 import { tripDuration, formatDeadline } from "../utils/bookingTime";
@@ -28,16 +34,22 @@ export default function Checkout() {
     expire,
     leave,
   } = useBookingSession();
-  const [contact, setContact] = useState(() => ({
-    name: user?.name || "",
-    email: user?.email || "",
-    phone: "",
-  }));
-  const [travelers, setTravelers] = useState({}),
+  const code = session?.code;
+  const [draft] = useState(() => readDraft(code));
+  const [cancelRequested, setCancelRequested] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(true);
+  const [contact, setContact] = useState(
+    () =>
+      draft?.contact || {
+        name: user?.name || "",
+        email: user?.email || "",
+        phone: "",
+      },
+  );
+  const [travelers, setTravelers] = useState(draft?.travelers || {}),
     [accepted, setAccepted] = useState(false),
     [policy, setPolicy] = useState(null),
     [processing, setProcessing] = useState(false);
-  const code = session?.code;
   useEffect(() => {
     operationsService
       .policy()
@@ -52,11 +64,25 @@ export default function Checkout() {
       setError(bookingErrorMessage(e));
     }
   }, [code, setBookingSession, setError]);
+  useEffect(() => {
+    if (!session) return;
+    if (session.status !== "active_session") {
+      clearDraft(code);
+      return;
+    }
+    const saved = saveDraft(
+      code,
+      { contact, travelers },
+      session.session_expires_at,
+    );
+    const warning = setTimeout(() => setDraftSaved(saved), 0);
+    return () => clearTimeout(warning);
+  }, [code, session, contact, travelers]);
   const updateTraveler = (seat, key, value) =>
-    setTravelers({
-      ...travelers,
-      [seat]: { ...travelers[seat], [key]: value },
-    });
+    setTravelers((prev) => ({
+      ...prev,
+      [seat]: { ...prev[seat], [key]: value },
+    }));
   const submit = async (e) => {
     e.preventDefault();
     if (!ready || processing) return;
@@ -74,6 +100,7 @@ export default function Checkout() {
           policyVersion: policy?.version,
         }),
       );
+      clearDraft(code);
       setError("");
     } catch (e) {
       if (e.response?.status === 410) expire();
@@ -87,9 +114,11 @@ export default function Checkout() {
     try {
       setBookingSession(await fn(code));
       setError("");
+      return true;
     } catch (e) {
       setError(bookingErrorMessage(e));
       await refresh();
+      return false;
     } finally {
       setProcessing(false);
     }
@@ -97,6 +126,23 @@ export default function Checkout() {
   const confirmed = session && session.status !== "active_session";
   return (
     <main className="container-fox py-10">
+      {cancelRequested && (
+        <ConfirmDialog
+          title="¿Cancelar esta reserva?"
+          confirmLabel="Sí, cancelar reserva"
+          busy={processing}
+          onClose={() => setCancelRequested(false)}
+          onConfirm={async () => {
+            if (await action(reservationService.cancelReservation))
+              setCancelRequested(false);
+          }}
+        >
+          <p>
+            Se liberarán los asientos. Esta reserva aún no está pagada; si ya
+            hiciste un pago que no aparece, contacta primero al operador.
+          </p>
+        </ConfirmDialog>
+      )}
       {error && (
         <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">
           {error}
@@ -117,11 +163,28 @@ export default function Checkout() {
             {session.route} · Asientos {session.seats.join(", ")}
           </p>
           <p>{tripDuration(session.trip)}</p>
-          <p className="break-all font-mono text-sm text-fox-pink">{code}</p>
+          {session.trip.departure_at && (
+            <p>Salida: {formatDeadline(session.trip.departure_at)} (Perú)</p>
+          )}
+          {session.trip.arrival_at && (
+            <p>
+              Llegada estimada: {formatDeadline(session.trip.arrival_at)} (Perú)
+            </p>
+          )}
+          <ReservationCode code={code} />
+          {["pending", "sending", "failed"].includes(
+            session.confirmationEmailStatus,
+          ) && (
+            <p className="rounded-lg bg-blue-50 p-3 text-sm">
+              El correo de confirmación aún no se ha enviado. Guarda el
+              comprobante aquí y consulta el estado en Mis viajes.
+            </p>
+          )}
           <p className="font-bold">Total: {formatCurrency(session.price)}</p>
           {session.status === "pending_payment" && (
             <>
               <PaymentDeadline reservation={session} onElapsed={refresh} />
+              <PaymentOptions reservation={session} />
               <div className="flex flex-wrap gap-3">
                 {session.payment_mode === "demo" && (
                   <Button
@@ -134,16 +197,11 @@ export default function Checkout() {
                 <Button
                   variant="secondary"
                   disabled={processing}
-                  onClick={() => action(reservationService.cancelReservation)}
+                  onClick={() => setCancelRequested(true)}
                 >
                   Cancelar reserva
                 </Button>
               </div>
-              <p className="text-sm text-gray-600">
-                {session.payment_mode === "demo"
-                  ? "El pago demo no cobra dinero. Las operaciones bancarias requieren un proveedor conectado."
-                  : "El operador registra el pago mediante su adaptador verificado o caja autorizada. Conserva tu comprobante."}
-              </p>
             </>
           )}
           {session.status === "paid" && (
@@ -167,6 +225,12 @@ export default function Checkout() {
               consultar al operador. Verifica el estado en Mis viajes.
             </p>
           )}
+          <Link
+            className="block py-2 text-fox-pink underline"
+            to={"/reservas/" + code}
+          >
+            Ver y guardar comprobante de reserva
+          </Link>
           <Button fullWidth onClick={() => leave("/mis-viajes")}>
             Ver mis viajes
           </Button>
@@ -192,6 +256,14 @@ export default function Checkout() {
                 El comprador puede reservar para otras personas. Cada asiento
                 requiere un viajero diferente.
               </p>
+              <p
+                role={draftSaved ? undefined : "alert"}
+                className="rounded-lg bg-blue-50 p-3 text-sm"
+              >
+                {draftSaved
+                  ? "Conservamos un borrador temporal en esta pestaña durante la sesión. Al volver atrás o recargar, revisa tus datos y acepta nuevamente las condiciones. El plazo no se reinicia."
+                  : "Tu navegador no permite guardar el borrador. No recargues ni salgas de esta pantalla mientras completas los datos; tu sesión mantiene el mismo plazo."}
+              </p>
               <fieldset className="space-y-3">
                 <legend className="mb-3 font-bold">
                   Comprador · contacto y recuperación
@@ -213,6 +285,13 @@ export default function Checkout() {
                       type={type}
                       className="input"
                       required
+                      autoComplete={
+                        key === "phone"
+                          ? "tel"
+                          : key === "email"
+                            ? "email"
+                            : "name"
+                      }
                       maxLength={key === "phone" ? 20 : 150}
                       value={contact[key]}
                       onChange={(e) =>
@@ -224,6 +303,15 @@ export default function Checkout() {
               </fieldset>
               {seats.map((seat, i) => {
                 const p = travelers[seat] || {};
+                const minor =
+                  p.birthDate &&
+                  trip?.date &&
+                  new Date(p.birthDate + "T00:00:00Z") >
+                    new Date(
+                      new Date(trip.date + "T00:00:00Z").setUTCFullYear(
+                        Number(trip.date.slice(0, 4)) - 18,
+                      ),
+                    );
                 return (
                   <fieldset
                     key={seat}
@@ -232,6 +320,13 @@ export default function Checkout() {
                     <legend className="px-2 font-bold">
                       Viajero {i + 1} · asiento {seat}
                     </legend>
+                    <button
+                      type="button"
+                      className="min-h-11 text-sm text-fox-pink underline"
+                      onClick={() => updateTraveler(seat, "name", contact.name)}
+                    >
+                      Usar nombre del comprador
+                    </button>
                     <label htmlFor={"name-" + seat} className="block text-sm">
                       Nombre del viajero {i + 1}
                     </label>
@@ -277,7 +372,30 @@ export default function Checkout() {
                           className="input"
                           id={"document-" + seat}
                           required
-                          maxLength={20}
+                          maxLength={
+                            (p.documentType || "DNI") === "DNI"
+                              ? 8
+                              : p.documentType === "CE"
+                                ? 15
+                                : 20
+                          }
+                          inputMode={
+                            (p.documentType || "DNI") === "DNI"
+                              ? "numeric"
+                              : "text"
+                          }
+                          pattern={
+                            (p.documentType || "DNI") === "DNI"
+                              ? "[0-9]{8}"
+                              : p.documentType === "CE"
+                                ? "[A-Za-z0-9]{6,15}"
+                                : "[A-Za-z0-9]{5,20}"
+                          }
+                          title={
+                            (p.documentType || "DNI") === "DNI"
+                              ? "El DNI tiene 8 dígitos"
+                              : "Documento del viajero"
+                          }
                           value={p.documentNumber || ""}
                           onChange={(e) =>
                             updateTraveler(
@@ -303,21 +421,31 @@ export default function Checkout() {
                         updateTraveler(seat, "birthDate", e.target.value)
                       }
                     />
-                    <label
-                      htmlFor={"guardian-" + seat}
-                      className="block text-sm"
-                    >
-                      Adulto responsable (si es menor de edad)
-                    </label>
-                    <input
-                      id={"guardian-" + seat}
-                      className="input"
-                      maxLength={150}
-                      value={p.guardian || ""}
-                      onChange={(e) =>
-                        updateTraveler(seat, "guardian", e.target.value)
-                      }
-                    />
+                    {minor && (
+                      <>
+                        <label
+                          htmlFor={"guardian-" + seat}
+                          className="block text-sm"
+                        >
+                          Adulto responsable (si es menor de edad)
+                        </label>
+                        <input
+                          id={"guardian-" + seat}
+                          className="input"
+                          maxLength={150}
+                          required
+                          value={p.guardian || ""}
+                          onChange={(e) =>
+                            updateTraveler(seat, "guardian", e.target.value)
+                          }
+                        />
+                        <p className="text-sm text-gray-600">
+                          Revisa los requisitos para menores publicados por el
+                          operador; declarar un responsable no sustituye la
+                          verificación del terminal.
+                        </p>
+                      </>
+                    )}
                   </fieldset>
                 );
               })}
@@ -344,26 +472,19 @@ export default function Checkout() {
                   : "Confirmar reserva sin pagar"}
               </Button>
             </form>
-            <aside className="h-fit space-y-3 rounded-2xl bg-white p-6">
-              <h2 className="font-bold">Resumen de la ruta</h2>
-              <p>
-                {trip?.origin} → {trip?.destination}
-              </p>
-              <p>{tripDuration(trip)}</p>
-              <p>{seats.join(", ")}</p>
-              <p className="text-sm">Terminal: {trip?.terminalOrigin}</p>
-              {trip?.boarding_at && (
-                <p className="text-sm">
-                  Presentación: {formatDeadline(trip.boarding_at)}
-                </p>
-              )}
-              <p className="font-bold text-fox-pink">
-                {formatCurrency(totalPrice)}
-              </p>
+            <TripSummary
+              trip={session?.trip || trip}
+              seats={seats}
+              passengerCount={
+                session?.passengerCount || trip?.passengerCount || 1
+              }
+              total={totalPrice}
+            >
+              <ServiceDetails trip={session?.trip || trip} policy={policy} />
               <p className="text-sm">
                 Al confirmar tendrás 2 horas para registrar el pago o cancelar.
               </p>
-            </aside>
+            </TripSummary>
           </div>
         </>
       )}

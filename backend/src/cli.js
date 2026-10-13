@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { OperationsStore } from "./operations-store.js";
 import { AuthStore } from "./auth.js";
+import { operatorReady, checkoutConfigured } from "./passenger-experience.js";
 import { encryptBackup } from "./backup-crypto.js";
 import { randomUUID } from "node:crypto";
 const command = process.argv[2],
@@ -91,12 +92,15 @@ try {
     console.log(
       JSON.stringify(
         {
-          operatorConfigured: Boolean(
-            policy.legalName &&
-            policy.taxId &&
-            policy.supportEmail &&
-            policy.address,
-          ),
+          operatorConfigured: operatorReady(policy),
+          hostedCheckoutConfigured: checkoutConfigured({
+            endpoint: process.env.PAYMENT_CHECKOUT_URL,
+            token: process.env.PAYMENT_CHECKOUT_TOKEN,
+            hosts: (process.env.PAYMENT_CHECKOUT_HOSTS || "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          }),
           mailConfigured: Boolean(process.env.MAIL_WEBHOOK_URL),
           paymentAdapterConfigured: Boolean(process.env.PAYMENT_WEBHOOK_SECRET),
           demoFlagsEnabled: [

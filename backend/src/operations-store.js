@@ -4,34 +4,48 @@ import { fail, iso, digest, validateDate, limaDate } from "./domain.js";
 
 export class OperationsStore extends BookingStore {
   requestRecovery({ code, email }) {
-    const row = this.db
-      .prepare("SELECT * FROM reservations WHERE code=?")
-      .get(typeof code === "string" ? code : "");
-    const contact = JSON.parse(row?.passenger_json || "null");
-    if (
-      contact?.email ===
-      String(email || "")
-        .trim()
-        .toLowerCase()
-    ) {
-      const token = randomBytes(32).toString("hex");
-      this.db
+    const address = String(email || "")
+      .trim()
+      .toLowerCase();
+    if (address.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address))
+      return {
+        message:
+          "Si hay reservas asociadas, recibirás un enlace en ese correo.",
+      };
+    return this.transaction((now) => {
+      const rows = this.db
         .prepare(
-          "INSERT INTO access_tokens(hash,kind,resource,expires_at,used_at) VALUES (?,'reservation',?,?,NULL)",
+          "SELECT * FROM reservations WHERE json_extract(passenger_json,'$.email')=? AND (?='' OR code=?) ORDER BY created_at DESC LIMIT 50",
         )
-        .run(digest(token), row.code, iso(this.clock() + 30 * 60000));
-      this.queueMail(
-        row.owner_hash,
-        contact.email,
-        "Recuperar reserva",
-        this.publicUrl + "/recuperar?token=" + token,
-        row.code,
-      );
-    }
-    return {
-      message:
-        "Si los datos coinciden, se registró el envío de un enlace de acceso. Revisa el correo del comprador.",
-    };
+        .all(
+          address,
+          typeof code === "string" ? code.trim() : "",
+          typeof code === "string" ? code.trim() : "",
+        );
+      if (rows.length) {
+        const token = randomBytes(32).toString("hex");
+        const resource =
+          rows.length === 1
+            ? rows[0].code
+            : JSON.stringify(rows.map((r) => r.code));
+        this.db
+          .prepare(
+            "INSERT INTO access_tokens(hash,kind,resource,expires_at,used_at) VALUES (?,'reservation',?,?,NULL)",
+          )
+          .run(digest(token), resource, iso(now + 30 * 60000));
+        this.queueMail(
+          rows[0].owner_hash,
+          address,
+          "Recuperar reserva",
+          this.publicUrl + "/recuperar?token=" + token,
+          rows[0].code,
+        );
+      }
+      return {
+        message:
+          "Si hay reservas asociadas a los datos indicados, recibirás un enlace en ese correo. Revisa también la carpeta de spam.",
+      };
+    });
   }
   redeemRecovery(token, owner) {
     return this.transaction((now) => {
@@ -41,22 +55,32 @@ export class OperationsStore extends BookingStore {
           "SELECT * FROM access_tokens WHERE hash=? AND kind='reservation' AND expires_at>?",
         )
         .get(hash, iso(now));
-      if (!row) fail(410, "LINK_EXPIRED", "El enlace expiró o ya fue usado.");
-      if (row.used_at) {
-        if (row.used_owner !== owner)
-          fail(410, "LINK_EXPIRED", "El enlace ya fue utilizado.");
-        return this.view(this.owned(row.resource, owner), now);
+      if (!row || (row.used_at && row.used_owner !== owner))
+        fail(410, "LINK_EXPIRED", "El enlace expiró o ya fue usado.");
+      const codes = row.resource.startsWith("[")
+        ? JSON.parse(row.resource)
+        : [row.resource];
+      if (!row.used_at) {
+        for (const code of codes) {
+          this.db
+            .prepare(
+              "INSERT INTO reservation_grants VALUES (?,?,?) ON CONFLICT(reservation_code,owner_hash) DO UPDATE SET expires_at=excluded.expires_at",
+            )
+            .run(code, owner, iso(now + 7 * 86400000));
+        }
+        this.db
+          .prepare(
+            "UPDATE access_tokens SET used_at=?,used_owner=? WHERE hash=?",
+          )
+          .run(iso(now), owner, hash);
+        this.audit(owner, "reservation_recovered", codes[0], {
+          count: codes.length,
+        });
       }
-      this.db
-        .prepare(
-          "INSERT INTO reservation_grants VALUES (?,?,?) ON CONFLICT(reservation_code,owner_hash) DO UPDATE SET expires_at=excluded.expires_at",
-        )
-        .run(row.resource, owner, iso(now + 7 * 86400000));
-      this.db
-        .prepare("UPDATE access_tokens SET used_at=?,used_owner=? WHERE hash=?")
-        .run(iso(now), owner, hash);
-      this.audit(owner, "reservation_recovered", row.resource);
-      return this.view(this.owned(row.resource, owner), now);
+      return {
+        ...this.view(this.owned(codes[0], owner), now),
+        recoveredCodes: codes,
+      };
     });
   }
   ticketsFor(code, owner) {
@@ -130,9 +154,20 @@ export class OperationsStore extends BookingStore {
         time = iso(now);
       this.db
         .prepare(
-          "INSERT INTO service_requests(id,reservation_code,owner_hash,kind,message,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+          "INSERT INTO service_requests(id,reservation_code,owner_hash,kind,message,created_at,updated_at,response_due_at) VALUES (?,?,?,?,?,?,?,?)",
         )
-        .run(id, code, owner, kind, message.trim(), time, time);
+        .run(
+          id,
+          code,
+          owner,
+          kind,
+          message.trim(),
+          time,
+          time,
+          this.policy().serviceResponseHours === null
+            ? null
+            : iso(now + this.policy().serviceResponseHours * 3600000),
+        );
       this.notify(
         row,
         "Solicitud registrada",
@@ -690,10 +725,34 @@ export class OperationsStore extends BookingStore {
         "baggageKg",
         "retentionDays",
         "offers",
+        "supportHours",
+        "paymentInstructions",
+        "changePolicy",
+        "refundPolicy",
+        "serviceResponseHours",
       ];
     const next = { ...old, version: iso(this.clock()) };
     for (const key of allowed)
       if (Object.hasOwn(policy, key)) next[key] = policy[key];
+    for (const key of allowed)
+      if (typeof next[key] === "string") next[key] = next[key].trim();
+    if (
+      [
+        "supportHours",
+        "paymentInstructions",
+        "changePolicy",
+        "refundPolicy",
+      ].some((k) => typeof next[k] !== "string" || next[k].length > 2000) ||
+      (next.serviceResponseHours !== null &&
+        (!Number.isInteger(next.serviceResponseHours) ||
+          next.serviceResponseHours < 1 ||
+          next.serviceResponseHours > 720))
+    )
+      fail(
+        400,
+        "INVALID_POLICY",
+        "Revisa instrucciones, condiciones y tiempo de respuesta.",
+      );
     if (
       typeof next.legalName !== "string" ||
       next.legalName.length > 200 ||
@@ -730,36 +789,102 @@ export class OperationsStore extends BookingStore {
   chatbot(message) {
     const p = this.policy(),
       m = String(message || "").toLowerCase();
+    const action = (label, to) => ({ label, to });
     if (m.includes("equipaje"))
       return {
         message:
           p.baggageKg === null
-            ? "El operador todavía debe publicar su política de equipaje. Confírmala con atención al cliente antes de comprar."
-            : `La franquicia publicada es de ${p.baggageKg} kg. Consulta cargos adicionales con el operador.`,
+            ? "La franquicia de equipaje no se ha publicado. Confírmala con el operador antes de una compra real."
+            : `La franquicia publicada es de ${p.baggageKg} kg por viajero. Consulta cargos adicionales con el operador.`,
+        actions: [
+          action("Consultar condiciones", "/condiciones"),
+          action("Contactar al operador", "/ayuda"),
+        ],
       };
     if (m.includes("oferta"))
       return {
         message: p.offers.length
           ? p.offers.join(" · ")
           : "No hay promociones publicadas actualmente.",
+        actions: [action("Buscar viajes", "/resultados")],
       };
-    if (m.includes("horario"))
+    if (/devol|reprogram|retras|cancel|reclamo/.test(m))
       return {
         message:
-          "Los horarios y disponibilidad se consultan en Buscar viajes. Solo se muestran salidas programadas que aún admiten reservas.",
+          "Abre Mis viajes, elige tu reserva y pulsa Gestionar viaje o reclamo. Una reserva no pagada puede cancelarse tras confirmar la acción. Para una reserva pagada, registra una solicitud y revisa su seguimiento. " +
+          (p.serviceResponseHours
+            ? "Primera respuesta publicada: " +
+              p.serviceResponseHours +
+              " horas calendario."
+            : "El operador aún no publicó un plazo de respuesta.") +
+          " Una solicitud no equivale a aprobación ni a devolución bancaria.",
+        actions: [
+          action("Gestionar mi viaje", "/mis-viajes"),
+          action("Ver condiciones", "/condiciones"),
+        ],
       };
-    if (m.includes("devol") || m.includes("reprogram") || m.includes("retras"))
+    if (/recuper|codigo|código|contrase/.test(m))
       return {
         message:
-          "Registra tu solicitud en Mis viajes. Recibirás un número de seguimiento y una respuesta del personal. Una solicitud no equivale a aprobación ni a devolución bancaria.",
+          "En Recuperar reservas introduce el correo del comprador. El código es opcional: si no lo tienes, podrás recuperar las reservas asociadas después de verificar el enlace de correo. Para tu cuenta, selecciona Recuperar contraseña. Los enlaces expiran en 30 minutos.",
+        actions: [action("Recuperar acceso", "/recuperar")],
+      };
+    if (/pago|pagar|tarjeta|yape|plin/.test(m))
+      return {
+        message:
+          "Abre tu reserva pendiente en Mis viajes. En Cómo pagar tu reserva verás únicamente los medios publicados y el acceso al proveedor, cuando esté habilitado. Incluye el código y conserva el comprobante. El boleto se emite al verificar el pago. Si ya pagaste y no aparece, consulta al operador antes de repetir el pago.",
+        actions: [
+          action("Ver mi reserva y pago", "/mis-viajes"),
+          action("Contactar al operador", "/ayuda"),
+        ],
+      };
+    if (/horario|salida|ruta/.test(m))
+      return {
+        message:
+          "Elige origen, destino, fecha y cantidad de viajeros en Buscar viajes. Allí aparecen las salidas publicadas, duración y fecha estimada de llegada. Las reservas con pago diferido cierran 10 minutos + 2 horas + el margen de presentación antes de salir.",
+        actions: [action("Consultar salidas", "/resultados")],
+      };
+    if (/compra|pasaje|reserva/.test(m))
+      return {
+        message:
+          "1. Busca origen, destino, fecha y viajeros. 2. Compara el servicio y selecciona los asientos. 3. Completa comprador y viajeros; dispones de 10 minutos para confirmar. 4. Tras confirmar, tienes 2 horas para pagar por un medio publicado o cancelar. 5. Consulta Mis viajes y guarda el boleto QR cuando el pago esté verificado. Puedes reservar sin crear cuenta.",
+        actions: [
+          action("Empezar búsqueda", "/resultados"),
+          action("Ver mis viajes", "/mis-viajes"),
+        ],
       };
     return {
       message:
-        "Puedes buscar salidas, consultar reservas, recuperar acceso y registrar solicitudes en Mis viajes. " +
-        (p.supportPhone
-          ? "Atención: " + p.supportPhone
-          : "El canal de atención del operador todavía debe configurarse."),
+        "Puedo orientarte sobre compra, pagos, recuperación, equipaje y solicitudes. Para atención de una persona, consulta los canales y horarios publicados por el operador.",
+      actions: [
+        action("Hablar con el operador", "/ayuda"),
+        action("Ver mis viajes", "/mis-viajes"),
+      ],
     };
+  }
+  upcomingDates({ origin, destination, date, passengers = 1 }) {
+    validateDate(date);
+    if (
+      !Number.isInteger(Number(passengers)) ||
+      Number(passengers) < 1 ||
+      Number(passengers) > 6
+    )
+      fail(400, "INVALID_PASSENGERS", "Reserva entre 1 y 6 pasajeros.");
+    return this.transaction((now) => {
+      const rows = this.db
+        .prepare(
+          "SELECT d.* FROM departures d JOIN trips t ON t.id=d.trip_id WHERE t.origin=? COLLATE NOCASE AND t.destination=? COLLATE NOCASE AND d.travel_date>? AND d.status='scheduled' ORDER BY d.travel_date,d.departure_at LIMIT 100",
+        )
+        .all(origin || "", destination || "", date);
+      const dates = new Map();
+      for (const dep of rows) {
+        if (now >= this.salesClose(dep)) continue;
+        const trip = this.tripView(this.tripRow(dep.trip_id), dep.travel_date);
+        if (trip.seatsAvailable < Number(passengers)) continue;
+        dates.set(dep.travel_date, (dates.get(dep.travel_date) || 0) + 1);
+      }
+      return [...dates].slice(0, 5).map(([date, count]) => ({ date, count }));
+    });
   }
   routes() {
     return this.db
@@ -775,10 +900,26 @@ export class OperationsStore extends BookingStore {
       durationMinutes,
       priceCents,
       service,
+      serviceDescription = "",
+      features = [],
       departureTime = "06:00",
     },
     actor,
   ) {
+    if (
+      typeof serviceDescription !== "string" ||
+      serviceDescription.length > 1000 ||
+      !Array.isArray(features) ||
+      features.length > 12 ||
+      features.some(
+        (f) => typeof f !== "string" || f.trim().length < 2 || f.length > 100,
+      )
+    )
+      fail(
+        400,
+        "INVALID_ROUTE",
+        "Revisa las características publicadas del servicio.",
+      );
     origin = typeof origin === "string" ? origin.trim() : origin;
     destination =
       typeof destination === "string" ? destination.trim() : destination;
@@ -804,7 +945,7 @@ export class OperationsStore extends BookingStore {
       fail(400, "INVALID_ROUTE", "Revisa ruta, duración, tarifa y servicio.");
     const row = this.db
       .prepare(
-        "INSERT INTO trips(origin,destination,departure_time,duration_minutes,price_cents,service) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO trips(origin,destination,departure_time,duration_minutes,price_cents,service,service_description,features_json) VALUES (?,?,?,?,?,?,?,?)",
       )
       .run(
         origin.trim(),
@@ -813,8 +954,55 @@ export class OperationsStore extends BookingStore {
         durationMinutes,
         priceCents,
         service.trim(),
+        serviceDescription.trim(),
+        JSON.stringify(features.map((f) => f.trim())),
       );
     this.audit(actor.id, "route_created", String(row.lastInsertRowid));
     return { id: Number(row.lastInsertRowid) };
+  }
+  estimateFinancialCase(id, actor, { expectedResolutionAt, response }) {
+    const at = Date.parse(expectedResolutionAt);
+    if (
+      !Number.isFinite(at) ||
+      at <= this.clock() ||
+      at > this.clock() + 365 * 86400000 ||
+      typeof response !== "string" ||
+      response.trim().length < 10 ||
+      response.length > 2000
+    )
+      fail(
+        400,
+        "INVALID_ESTIMATE",
+        "Indica una fecha futura y una explicación para el pasajero.",
+      );
+    return this.transaction((now) => {
+      const financial = this.db
+        .prepare("SELECT * FROM financial_cases WHERE id=?")
+        .get(id);
+      if (!financial || financial.status === "resolved")
+        fail(409, "CASE_CLOSED", "El caso no está abierto.");
+      this.db
+        .prepare(
+          "UPDATE financial_cases SET expected_resolution_at=?,response=?,updated_at=? WHERE id=?",
+        )
+        .run(iso(at), response.trim(), iso(now), id);
+      if (financial.reservation_code) {
+        const reservation = this.db
+          .prepare("SELECT * FROM reservations WHERE code=?")
+          .get(financial.reservation_code);
+        this.notify(
+          reservation,
+          "Actualización de tu devolución",
+          response.trim() +
+            " Fecha estimada: " +
+            iso(at) +
+            ". Consulta Mis viajes.",
+        );
+      }
+      this.audit(actor.id, "financial_estimate_updated", id);
+      return {
+        message: "Fecha estimada comunicada. No se registró una transferencia.",
+      };
+    });
   }
 }

@@ -4,6 +4,7 @@ import { ClipboardCheck, CreditCard, Headphones } from "lucide-react";
 import Hero from "../components/landing/Hero";
 import FeatureCard from "../components/landing/FeatureCard";
 import FoxBotSection from "../components/landing/FoxBotSection";
+import { bookingErrorMessage } from "../services/reservationService";
 import { operationsService } from "../services/operationsService";
 const features = [
   {
@@ -27,12 +28,15 @@ const features = [
 ];
 export default function LandingPage() {
   const [routes, setRoutes] = useState([]),
-    [policy, setPolicy] = useState(null);
+    [policy, setPolicy] = useState(null),
+    [error, setError] = useState(""),
+    [loading, setLoading] = useState(true);
   useEffect(() => {
     operationsService
       .catalog()
       .then(setRoutes)
-      .catch(() => {});
+      .catch((e) => setError(bookingErrorMessage(e)))
+      .finally(() => setLoading(false));
     operationsService
       .policy()
       .then(setPolicy)
@@ -70,14 +74,24 @@ export default function LandingPage() {
             </Link>
           ))}
         </div>
-        {!routes.length && <p>No hay rutas publicadas disponibles.</p>}
-        <h2 className="mb-3 mt-8 text-xl font-bold">
-          Promociones publicadas por el operador
-        </h2>
-        {policy?.offers?.length ? (
-          policy.offers.map((o) => <p key={o}>{o}</p>)
-        ) : (
-          <p>No hay promociones publicadas actualmente.</p>
+        {error && (
+          <p role="alert" className="text-red-700">
+            {error}
+          </p>
+        )}
+        {loading && <p>Cargando rutas publicadas…</p>}
+        {!loading && !error && !routes.length && (
+          <p>No hay rutas publicadas disponibles.</p>
+        )}
+        {policy?.offers?.length > 0 && (
+          <>
+            <h2 className="mb-3 mt-8 text-xl font-bold">
+              Promociones del operador
+            </h2>
+            {policy.offers.map((o) => (
+              <p key={o}>{o}</p>
+            ))}
+          </>
         )}
       </section>
       <FoxBotSection

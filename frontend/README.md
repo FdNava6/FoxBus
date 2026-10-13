@@ -90,6 +90,8 @@ El frontend utiliza Tailwind 4. Revisar compatibilidad de navegadores antiguos a
 
 ## Verificación
 
+La revisión de experiencia del pasajero incorpora borradores temporales, retomar, recuperación por correo, comprobante, confirmaciones, información del grupo y ayuda móvil. [Cobertura y contrato de pago](../docs/PASSENGER_EXPERIENCE.md).
+
 ```bash
 npm run lint
 npm test

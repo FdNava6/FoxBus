@@ -2,7 +2,13 @@ import api from "./api";
 export const operationsService = {
   policy: async () => (await api.get("/policies")).data,
   catalog: async () => (await api.get("/trips/catalog")).data,
+  upcomingDates: async (params) =>
+    (await api.get("/trips/upcoming-dates", { params })).data,
   health: async () => (await api.get("/health")).data,
+  paymentOptions: async (code) =>
+    (await api.get("/reservations/" + code + "/payment-options")).data,
+  startCheckout: async (code) =>
+    (await api.post("/reservations/" + code + "/start-checkout", {})).data,
   mailbox: async () => (await api.get("/dev/mailbox")).data,
   recovery: async (data) =>
     (await api.post("/reservations/recovery", data)).data,

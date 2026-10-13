@@ -1,207 +1,214 @@
-// ============================================
-// FoxBotWidget.jsx
-// Chatbot flotante de FOXTRIP.
-// Cumple la pantalla de "ventana flotante" FoxBot:
-// - botón circular flotante que abre/cierra el chat
-// - ventana responsive (anchor en móvil, w-96 en
-//   escritorio) con lista de mensajes
-// - respuestas rápidas y simulación de escritura
-// Se muestra en todas las pantallas públicas gracias
-// al PublicLayout y escucha el evento global
-// 'open-foxbot' (disparado desde la home).
-// ============================================
-import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { chatbotService } from '../../services/chatbotService';
-
+import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { MessageCircle, X, Send } from "lucide-react";
+import { chatbotService } from "../../services/chatbotService";
+const allowed = new Set([
+  "/resultados",
+  "/mis-viajes",
+  "/recuperar",
+  "/condiciones",
+  "/ayuda",
+]);
+const quickReplies = [
+  "¿Cómo compro un pasaje?",
+  "¿Cómo pago?",
+  "Política de equipaje",
+  "Recuperar mi reserva",
+];
 export default function FoxBotWidget() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false),
+    [input, setInput] = useState(""),
+    [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState([
     {
-      id: 1,
-      text: '¡Hola! Soy FoxBot 🦊. ¿En qué puedo ayudarte hoy?',
-      sender: 'bot',
-      timestamp: new Date()
-    }
+      id: "welcome",
+      text: "Hola. Te ayudo con reservas, pagos y solicitudes. ¿Qué necesitas?",
+      sender: "bot",
+    },
   ]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef(null);
-
-  useEffect(() => {
-    const openHandler = () => setIsOpen(true);
-    window.addEventListener('open-foxbot', openHandler);
-    return () => window.removeEventListener('open-foxbot', openHandler);
-  }, []);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const inputRef = useRef(null),
+    trigger = useRef(null),
+    endRef = useRef(null),
+    sending = useRef(false);
+  const close = () => {
+    setIsOpen(false);
+    trigger.current?.focus();
   };
-
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!inputMessage.trim()) return;
-
-    const userMessage = {
-      id: messages.length + 1,
-      text: inputMessage,
-      sender: 'user',
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsTyping(true);
-
+    const open = () => setIsOpen(true);
+    window.addEventListener("open-foxbot", open);
+    return () => window.removeEventListener("open-foxbot", open);
+  }, []);
+  useEffect(() => {
+    if (isOpen) inputRef.current?.focus();
+  }, [isOpen]);
+  useEffect(() => {
+    if (isOpen) endRef.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, isOpen]);
+  const send = async (text) => {
+    const value = text.trim();
+    if (!value || sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    setInput("");
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), text: value, sender: "user" },
+    ]);
     try {
-      const response = await chatbotService.sendMessage(inputMessage);
-      
-      const botMessage = {
-        id: messages.length + 2,
-        text: response.message,
-        sender: 'bot',
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, botMessage]);
-    } catch (error) {
-      console.error('Error:', error);
+      const response = await chatbotService.sendMessage(value);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          text: response.message,
+          sender: "bot",
+          actions: (response.actions || []).filter((a) => allowed.has(a.to)),
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          text: "No pude obtener una respuesta. Puedes consultar tus reservas o los canales del operador.",
+          sender: "bot",
+          actions: [{ label: "Ayuda y contacto", to: "/ayuda" }],
+        },
+      ]);
     } finally {
-      setIsTyping(false);
+      sending.current = false;
+      setBusy(false);
     }
   };
-
-  const quickReplies = [
-    '¿Cómo compro un pasaje?',
-    'Política de equipaje',
-    'Horarios de viaje',
-    'Ofertas disponibles'
-  ];
-
-  const handleQuickReply = (text) => {
-    setInputMessage(text);
-  };
-
   return (
     <>
-      {/* Botón flotante */}
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 bg-fox-pink text-white p-4 rounded-full shadow-fox-lg hover:shadow-fox transition-shadow"
+      <button
+        ref={trigger}
+        type="button"
+        aria-label={isOpen ? "Cerrar FoxBot" : "Abrir FoxBot"}
+        aria-expanded={isOpen}
+        aria-controls="foxbot-dialog"
+        onClick={() => (isOpen ? close() : setIsOpen(true))}
+        className="fixed right-4 bottom-[calc(4.5rem_+_env(safe-area-inset-bottom))] z-50 rounded-full bg-fox-pink p-4 text-white shadow-lg sm:bottom-6 sm:right-6"
       >
-        {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
-      </motion.button>
-
-      {/* Chat Window */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed z-50 inset-x-4 bottom-24 sm:inset-x-auto sm:right-6 sm:w-96 flex flex-col max-h-[calc(100dvh-7rem)] bg-white rounded-2xl shadow-2xl overflow-hidden"
+        {isOpen ? (
+          <X aria-hidden="true" className="h-6 w-6" />
+        ) : (
+          <MessageCircle aria-hidden="true" className="h-6 w-6" />
+        )}
+      </button>
+      {isOpen && (
+        <section
+          id="foxbot-dialog"
+          role="dialog"
+          aria-labelledby="foxbot-title"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") close();
+          }}
+          className="fixed inset-x-3 bottom-[calc(8rem_+_env(safe-area-inset-bottom))] z-50 flex max-h-[calc(100dvh_-_10rem)] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:inset-x-auto sm:right-6 sm:bottom-24 sm:w-96"
+        >
+          <header className="flex items-center justify-between gap-3 bg-fox-pink px-4 py-3 text-white">
+            <div>
+              <h2 id="foxbot-title" className="font-bold">
+                FoxBot · Ayuda para tu viaje
+              </h2>
+              <p className="text-xs">
+                Orientación automática según información publicada
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Cerrar ayuda de FoxBot"
+              onClick={close}
+              className="min-h-11 min-w-11"
+            >
+              <X aria-hidden="true" />
+            </button>
+          </header>
+          <div
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            className="min-h-24 flex-1 space-y-3 overflow-y-auto bg-gray-50 p-3"
           >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-fox-pink to-fox-pink-dark p-4 text-white">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white/20 rounded-full">
-                  <Bot className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold">FoxBot</h3>
-                  <p className="text-sm text-white/80">Asistente Virtual</p>
-                  <p className="text-xs text-white/70">Demo con respuestas predefinidas</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto min-h-60 p-4 space-y-4 bg-gray-50">
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] p-3 rounded-2xl ${
-                      message.sender === 'user'
-                        ? 'bg-fox-pink text-white rounded-br-none'
-                        : 'bg-white text-gray-800 shadow-md rounded-bl-none'
-                    }`}
+            {messages.map((m) => (
+              <div
+                key={m.id}
+                className={
+                  "rounded-xl p-3 text-sm " +
+                  (m.sender === "bot" ? "bg-white" : "ml-6 bg-pink-100")
+                }
+              >
+                <p className="whitespace-pre-wrap">{m.text}</p>
+                {m.actions?.map((a) => (
+                  <Link
+                    key={a.to}
+                    onClick={close}
+                    to={a.to}
+                    className="mt-2 block min-h-11 rounded-lg border px-3 py-2 font-semibold text-fox-pink"
                   >
-                    <p className="text-sm">{message.text}</p>
-                    <span className="text-xs opacity-70 mt-1 block">
-                      {message.timestamp.toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </span>
-                  </div>
-                </motion.div>
-              ))}
-              
-              {isTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-white p-3 rounded-2xl rounded-bl-none shadow-md">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Quick Replies */}
-            <div className="p-3 bg-white border-t border-gray-100">
-              <div className="flex flex-wrap gap-2 mb-3">
-                {quickReplies.map((reply, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleQuickReply(reply)}
-                    className="text-xs px-3 py-1.5 bg-fox-pink/10 text-fox-pink rounded-full hover:bg-fox-pink/20 transition"
-                  >
-                    {reply}
-                  </button>
+                    {a.label}
+                  </Link>
                 ))}
               </div>
-            </div>
-
-            {/* Input */}
-            <div className="p-4 bg-white border-t border-gray-100">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="Escribe tu mensaje..."
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-full focus:ring-2 focus:ring-fox-pink focus:border-transparent outline-none text-sm"
-                />
-                <button
-                  onClick={handleSend}
-                  aria-label="Enviar mensaje"
-                  className="bg-fox-pink text-white p-2 rounded-full hover:bg-fox-pink-dark transition"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            ))}
+            {busy && <p role="status">Buscando una respuesta…</p>}
+            <div ref={endRef} />
+          </div>
+          <div className="flex flex-wrap gap-2 border-t p-3">
+            {quickReplies.map((q) => (
+              <button
+                key={q}
+                type="button"
+                disabled={busy}
+                onClick={() => send(q)}
+                className="min-h-11 rounded-lg bg-pink-50 px-3 text-xs font-semibold text-fox-pink"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(input);
+            }}
+            className="flex gap-2 border-t p-3"
+          >
+            <label htmlFor="foxbot-message" className="sr-only">
+              Mensaje para FoxBot
+            </label>
+            <input
+              ref={inputRef}
+              id="foxbot-message"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              maxLength={2000}
+              placeholder="Escribe tu pregunta…"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.nativeEvent.isComposing)
+                  e.preventDefault();
+              }}
+              className="min-w-0 flex-1 rounded-lg border p-3 text-sm"
+            />
+            <button
+              aria-label="Enviar mensaje"
+              disabled={busy || !input.trim()}
+              className="min-h-11 rounded-lg bg-fox-pink px-3 text-white"
+            >
+              <Send aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </form>
+          <Link
+            to="/ayuda"
+            onClick={close}
+            className="block border-t p-3 text-center text-sm font-semibold text-fox-pink underline"
+          >
+            Contactar con una persona
+          </Link>
+        </section>
+      )}
     </>
   );
 }
-

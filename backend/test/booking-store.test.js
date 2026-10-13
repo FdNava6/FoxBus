@@ -554,7 +554,7 @@ test("cancelación del operador abre devolución y anula boleto", (t) => {
 });
 test("FoxBot no anuncia políticas ni promociones inventadas", (t) => {
   const { store } = setup(t);
-  assert.match(store.chatbot("equipaje").message, /todavía debe publicar/);
+  assert.match(store.chatbot("equipaje").message, /no se ha publicado/);
   assert.match(store.chatbot("oferta").message, /No hay promociones/);
   store.setPolicy(
     { baggageKg: 15, offers: ["Oferta publicada por el operador."] },
@@ -647,7 +647,7 @@ test("SQLite conserva datos y aplica migraciones una sola vez tras reinicio", (t
   assert.equal(second.runExpiration().cancelledUnpaid, 1);
   assert.equal(
     second.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get().n,
-    2,
+    3,
   );
   assert.deepEqual(second.getSeats(1, "2026-10-21"), []);
 });

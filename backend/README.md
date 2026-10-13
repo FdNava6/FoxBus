@@ -51,6 +51,10 @@ Importes diferentes se revisan; un segundo cobro o pago fuera de plazo se regist
 
 ## Notificaciones, boletos y posventa
 
+La experiencia de pago del pasajero admite checkout alojado e instrucciones publicadas por el operador. [Contrato, configuración y alcance](../docs/PASSENGER_EXPERIENCE.md). Solicitar un checkout no cobra, no confirma pago y no extiende el plazo; solo el evento firmado o caja verificada cambian el estado.
+
+La recuperación acepta correo con código opcional y concede las reservas coincidentes únicamente después de verificar el enlace. Mis viajes incluye sesiones activas para retomarlas. Las solicitudes conservan el plazo de primera respuesta publicado al registrarse; Finanzas puede comunicar una estimación sin simular un reintegro.
+
 Las notificaciones se guardan en outbox antes del envío, con reintentos, bloqueo de trabajo e Idempotency-Key. Configurar MAIL_WEBHOOK_URL (HTTPS) y MAIL_API_KEY para un adaptador de correo. Este debe aceptar id, to, subject y text, respetar idempotencia y confirmar aceptación. Sin configuración, los correos permanecen pendientes y no se presentan como enviados.
 
 DEV_MAILBOX=true permite leer únicamente las notificaciones de la sesión actual en desarrollo. Nunca activar en producción.

@@ -3,6 +3,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { isIP } from "node:net";
 import QRCode from "qrcode";
+import {
+  hostedCheckout,
+  checkoutConfigured,
+  operatorReady,
+} from "./passenger-experience.js";
 import { OperationsStore } from "./operations-store.js";
 import {
   BookingError,
@@ -87,10 +92,20 @@ export function createApi({
   devMailbox = false,
   mailConfigured = false,
   trustProxy = false,
+  checkout = {},
+  checkoutFetch = fetch,
 }) {
   const auth = new AuthStore(store),
     limit = rateLimiter();
   const staff = ["admin", "agent", "finance"];
+  const onlineReady = (policy) =>
+    Boolean(
+      checkoutConfigured(checkout) &&
+      !demoPayments &&
+      operatorReady(policy) &&
+      paymentSecret &&
+      mailConfigured,
+    );
   const decorate = (r) => ({
     ...r,
     payment_mode: demoPayments ? "demo" : "provider_only",
@@ -158,12 +173,7 @@ export function createApi({
         (path === "/api/reservations/sessions" ||
           path.endsWith("/confirm") ||
           path === "/api/staff/counter") &&
-        (!policy.legalName ||
-          !policy.taxId ||
-          !policy.supportEmail ||
-          !policy.address ||
-          !mailConfigured ||
-          !paymentSecret)
+        (!operatorReady(policy) || !mailConfigured || !paymentSecret)
       )
         fail(
           503,
@@ -193,6 +203,7 @@ export function createApi({
             ),
             mailConfigured,
             paymentAdapterConfigured: Boolean(paymentSecret),
+            onlinePaymentAvailable: onlineReady(p),
             demoPayments,
           },
           jobs: store.db
@@ -205,6 +216,8 @@ export function createApi({
         result = store.catalog();
       else if (method === "GET" && path === "/api/trips/search")
         result = store.searchTrips(params);
+      else if (method === "GET" && path === "/api/trips/upcoming-dates")
+        result = store.upcomingDates(params);
       else if (method === "GET" && /^\/api\/trips\/\d+(\/seats)?$/.test(path)) {
         const id = path.split("/")[3];
         result = path.endsWith("/seats")
@@ -268,6 +281,16 @@ export function createApi({
         ) {
           auth.require(user, staff);
           result = store.resolveRequest(
+            path.split("/")[4],
+            actor,
+            await body(),
+          );
+        } else if (
+          method === "PUT" &&
+          /^\/api\/staff\/financial\/[^/]+\/estimate$/.test(path)
+        ) {
+          auth.require(user, ["admin", "finance"]);
+          result = store.estimateFinancialCase(
             path.split("/")[4],
             actor,
             await body(),
@@ -390,12 +413,39 @@ export function createApi({
           result = store.getMine(owner).map(decorate);
         else {
           const match =
-            /^\/api\/reservations\/([^/]+)(?:\/(seats|confirm|pay-demo|tickets|requests))?$/.exec(
+            /^\/api\/reservations\/([^/]+)(?:\/(seats|confirm|pay-demo|tickets|requests|payment-options|start-checkout))?$/.exec(
               path,
             );
           if (!match) fail(404, "NOT_FOUND", "Ruta no encontrada.");
           const [, code, action] = match;
-          if (method === "GET" && !action)
+          if (method === "GET" && action === "payment-options") {
+            const reservation = store.getReservation(code, owner);
+            const policy = store.policy();
+            result = {
+              onlineAvailable:
+                onlineReady(policy) && reservation.status === "pending_payment",
+              instructions: policy.paymentInstructions,
+              supportEmail: policy.supportEmail,
+              supportPhone: policy.supportPhone,
+              supportHours: policy.supportHours,
+              demo: demoPayments,
+            };
+          } else if (method === "POST" && action === "start-checkout") {
+            await body();
+            if (!onlineReady(store.policy()))
+              fail(
+                503,
+                "CHECKOUT_UNAVAILABLE",
+                "El pago real no está habilitado. Consulta los medios publicados por el operador.",
+              );
+            result = await hostedCheckout(
+              store,
+              code,
+              owner,
+              checkout,
+              checkoutFetch,
+            );
+          } else if (method === "GET" && !action)
             result = decorate(store.getReservation(code, owner));
           else if (method === "DELETE" && !action)
             result = decorate(store.cancel(code, owner));
@@ -480,6 +530,14 @@ if (
       process.env.NODE_ENV !== "production",
     mailConfigured: Boolean(process.env.MAIL_WEBHOOK_URL),
     trustProxy: process.env.TRUST_PROXY === "true",
+    checkout: {
+      endpoint: process.env.PAYMENT_CHECKOUT_URL || "",
+      token: process.env.PAYMENT_CHECKOUT_TOKEN || "",
+      hosts: (process.env.PAYMENT_CHECKOUT_HOSTS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    },
   });
   server.listen(Number(process.env.PORT || 8080), () =>
     console.log("FOXbus: API, inventario y jobs activos."),

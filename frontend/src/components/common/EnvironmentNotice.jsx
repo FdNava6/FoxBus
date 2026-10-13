@@ -13,9 +13,8 @@ export default function EnvironmentNotice() {
     return null;
   return (
     <p data-print-hide className="bg-blue-50 px-5 py-3 text-sm text-blue-900">
-      Entorno de desarrollo: salidas y políticas de muestra. No se realizan
-      cobros bancarios. El operador debe completar sus datos antes del
-      lanzamiento.
+      Modo de prueba: las salidas son ejemplos y el pago simulado no cobra
+      dinero.
     </p>
   );
 }

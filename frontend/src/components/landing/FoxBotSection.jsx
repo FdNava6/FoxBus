@@ -3,7 +3,7 @@
 // Sección promocional del chatbot en la landing.
 // Invita al usuario a usar FoxBot para consultas.
 // ============================================
-import { Bot, MessageCircle } from 'lucide-react';
+import { Bot, MessageCircle } from "lucide-react";
 
 export default function FoxBotSection({ onOpenBot }) {
   return (
@@ -18,8 +18,8 @@ export default function FoxBotSection({ onOpenBot }) {
               ¿Tienes dudas? Habla con FoxBot
             </h2>
             <p className="text-gray-300">
-              Esta versión demostrativa responde preguntas frecuentes sobre
-              compra, equipaje, horarios y solicitudes de posventa.
+              Encuentra orientación sobre reservas, pagos, equipaje y cambios de
+              viaje.
             </p>
           </div>
         </div>

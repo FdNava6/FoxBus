@@ -2,7 +2,7 @@
 // App.jsx
 // Componente raíz de la aplicación.
 // Configura el enrutador de react-router con todas
-// las rutas de FOXTRIP, organizadas en dos bloques:
+// las rutas de FOXbus, organizadas en dos bloques:
 //
 //  Públicas (layout con Header/Footer/BotNav) :
 //    / , /resultados , /asientos , /checkout , /mis-viajes
@@ -30,12 +30,14 @@ import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import SearchResults from "./pages/SearchResults";
-import SeatSelection from "./pages/SeatSelection";
-import Checkout from "./pages/Checkout";
-import MyTrips from "./pages/MyTrips";
-import Recovery from "./pages/Recovery";
-import Policies from "./pages/Policies";
-import TicketPage from "./pages/TicketPage";
+const SeatSelection = lazy(() => import("./pages/SeatSelection"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const MyTrips = lazy(() => import("./pages/MyTrips"));
+const Recovery = lazy(() => import("./pages/Recovery"));
+const Policies = lazy(() => import("./pages/Policies"));
+const TicketPage = lazy(() => import("./pages/TicketPage"));
+const ReservationReceipt = lazy(() => import("./pages/ReservationReceipt"));
+const Help = lazy(() => import("./pages/Help"));
 import { useAuthStore } from "./store/useAuthStore";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import ScrollToTop from "./components/common/ScrollToTop";
@@ -61,7 +63,7 @@ function App() {
           <Suspense
             fallback={
               <div className="grid min-h-screen place-items-center text-gray-500">
-                Cargando FOXTRIP…
+                Cargando FOXbus…
               </div>
             }
           >
@@ -81,6 +83,11 @@ function App() {
                 <Route path="/recuperar" element={<Recovery />} />
                 <Route path="/condiciones" element={<Policies />} />
                 <Route path="/boletos/:code" element={<TicketPage />} />
+                <Route
+                  path="/reservas/:code"
+                  element={<ReservationReceipt />}
+                />
+                <Route path="/ayuda" element={<Help />} />
               </Route>
 
               {/* ---------- Autenticación ---------- */}

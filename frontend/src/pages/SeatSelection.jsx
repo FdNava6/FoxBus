@@ -8,9 +8,9 @@ import {
 } from "../services/reservationService";
 import useBookingSession from "../hooks/useBookingSession";
 import ReservationTimer from "../components/common/ReservationTimer";
-import { tripDuration, formatDeadline } from "../utils/bookingTime";
-import { formatCurrency } from "../utils/helpers";
+
 import Button from "../components/common/Button";
+import TripSummary from "../components/common/TripSummary";
 export default function SeatSelection() {
   const navigate = useNavigate();
   const { trip, seats: selected } = useCartStore();
@@ -131,6 +131,7 @@ export default function SeatSelection() {
                           key={seat.id}
                           aria-label={"Asiento " + seat.id}
                           aria-pressed={selected.includes(seat.id)}
+                          aria-describedby={"seat-info-" + seat.id}
                           title={seat.category}
                           disabled={
                             !ready ||
@@ -149,7 +150,24 @@ export default function SeatSelection() {
                                 : "bg-gray-100 text-gray-800")
                           }
                         >
-                          {seat.id}
+                          {seat.id}{" "}
+                          {selected.includes(seat.id)
+                            ? "✓"
+                            : seat.blocked
+                              ? "!"
+                              : used
+                                ? "×"
+                                : ""}
+                          <span id={"seat-info-" + seat.id} className="sr-only">
+                            {seat.blocked
+                              ? "Fuera de servicio"
+                              : used
+                                ? "Ocupado"
+                                : selected.includes(seat.id)
+                                  ? "Seleccionado"
+                                  : "Disponible"}{" "}
+                            · {seat.category} · piso {seat.floor}
+                          </span>
                         </button>
                       );
                     })}
@@ -158,25 +176,23 @@ export default function SeatSelection() {
             </div>
           ))}
           <p className="text-center text-sm text-gray-600">
-            Rosa: seleccionado · Gris oscuro: ocupado o fuera de servicio.
+            ✓ Seleccionado · × Ocupado · ! Fuera de servicio · Sin símbolo:
+            disponible.
           </p>
         </section>
-        <aside className="h-fit space-y-3 rounded-2xl bg-white p-6">
-          <h2 className="font-bold">Resumen de la ruta</h2>
-          <p>
-            {actual?.origin} → {actual?.destination}
-          </p>
-          <p>{tripDuration(actual)}</p>
-          <p className="text-sm">Terminal: {actual?.terminalOrigin}</p>
-          {actual?.boarding_at && (
-            <p className="text-sm">
-              Presentación: {formatDeadline(actual.boarding_at)}
-            </p>
-          )}
-          <p>Asientos: {selected.join(", ") || "Ninguno"}</p>
-          <p className="font-bold text-fox-pink">
-            {formatCurrency(session?.price || 0)}
-          </p>
+        <TripSummary
+          trip={actual}
+          seats={selected}
+          passengerCount={trip?.passengerCount || 1}
+        >
+          {selected.map((id) => {
+            const info = layout.find((s) => s.id === id);
+            return (
+              <p key={id} className="text-sm">
+                Asiento {id}: {info?.category} · piso {info?.floor}
+              </p>
+            );
+          })}
           <Button
             fullWidth
             disabled={
@@ -188,7 +204,7 @@ export default function SeatSelection() {
           >
             Continuar a datos
           </Button>
-        </aside>
+        </TripSummary>
       </div>
     </main>
   );

@@ -11,7 +11,14 @@ import {
 const contact = { name: "Ana", phone: "999999999", email: "ana@example.test" };
 async function setup(
   t,
-  { demoPayments = false, devMailbox = false, secureCookies = false } = {},
+  {
+    demoPayments = false,
+    devMailbox = false,
+    secureCookies = false,
+    checkout = {},
+    checkoutFetch = fetch,
+    mailConfigured = false,
+  } = {},
 ) {
   let now = Date.parse("2026-10-20T12:00:00Z");
   const store = new OperationsStore(":memory:", { clock: () => now });
@@ -21,6 +28,9 @@ async function setup(
     demoPayments,
     devMailbox,
     secureCookies,
+    checkout,
+    checkoutFetch,
+    mailConfigured,
     paymentSecret: "test-provider-secret",
   });
   await new Promise((r) => api.listen(0, "127.0.0.1", r));
@@ -400,5 +410,87 @@ test("el límite de una identidad no bloquea a otra de la misma red", async (t) 
   assert.equal(
     (await request("/health", "GET", undefined, "b".repeat(64))).status,
     200,
+  );
+});
+test("opciones y checkout HTTP solo del titular; servidor fija importe y no marca pago", async (t) => {
+  const checkout = {
+    endpoint: "https://adapter.example.test/create",
+    token: "test-secret",
+    hosts: ["pay.example.test"],
+  };
+  let payload;
+  const { request, start, data, store } = await setup(t, {
+    checkout,
+    mailConfigured: true,
+    checkoutFetch: async (_url, options) => {
+      payload = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({ checkoutUrl: "https://pay.example.test/session" }),
+      };
+    },
+  });
+  const r = await start();
+  store.setPolicy(
+    {
+      legalName: "Operador de prueba",
+      taxId: "11111111111",
+      supportEmail: "help@example.test",
+      address: "Domicilio de prueba",
+      changePolicy: "Política de prueba",
+      refundPolicy: "Política de prueba",
+      baggageKg: 15,
+    },
+    { id: "fixture" },
+  );
+  data.policyVersion = store.policy().version;
+  await request("/reservations/" + r.code + "/seats", "PUT", { seats: ["1A"] });
+  await request("/reservations/" + r.code + "/confirm", "POST", data);
+  const options = await request("/reservations/" + r.code + "/payment-options");
+  assert.equal(options.status, 200);
+  assert.equal(options.body.onlineAvailable, true);
+  assert.equal(
+    (
+      await request(
+        "/reservations/" + r.code + "/payment-options",
+        "GET",
+        undefined,
+        "b".repeat(64),
+      )
+    ).status,
+    404,
+  );
+  const link = await request(
+    "/reservations/" + r.code + "/start-checkout",
+    "POST",
+    { amountCents: 1 },
+  );
+  assert.equal(link.status, 200);
+  assert.equal(payload.amountCents, 8500);
+  assert.equal(link.body.checkoutUrl, "https://pay.example.test/session");
+  assert.equal(
+    store.getReservation(
+      r.code,
+      store.db
+        .prepare("SELECT owner_hash FROM reservations WHERE code=?")
+        .get(r.code).owner_hash,
+    ).status,
+    "pending_payment",
+  );
+});
+test("opciones explican ausencia de medio y checkout no inventa proveedor", async (t) => {
+  const { request, start, data } = await setup(t),
+    r = await start();
+  await request("/reservations/" + r.code + "/seats", "PUT", { seats: ["1A"] });
+  await request("/reservations/" + r.code + "/confirm", "POST", data);
+  assert.equal(
+    (await request("/reservations/" + r.code + "/payment-options")).body
+      .onlineAvailable,
+    false,
+  );
+  assert.equal(
+    (await request("/reservations/" + r.code + "/start-checkout", "POST", {}))
+      .status,
+    503,
   );
 });

@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
+import { POLICY_DEFAULTS } from "./passenger-experience.js";
 import {
   BookingError,
   fail,
@@ -40,6 +41,7 @@ export class BookingStore {
     for (const [version, file] of [
       [1, "001_booking_deadlines.sql"],
       [2, "002_operations.sql"],
+      [3, "003_passenger_experience.sql"],
     ]) {
       if (
         this.db
@@ -69,11 +71,14 @@ export class BookingStore {
     this.db.close();
   }
   policy() {
-    return JSON.parse(
-      this.db
-        .prepare("SELECT value FROM operator_settings WHERE key='policy'")
-        .get().value,
-    );
+    return {
+      ...POLICY_DEFAULTS,
+      ...JSON.parse(
+        this.db
+          .prepare("SELECT value FROM operator_settings WHERE key='policy'")
+          .get().value,
+      ),
+    };
   }
   audit(actor, action, resource, detail = {}) {
     this.db
@@ -326,6 +331,9 @@ export class BookingStore {
       price: row.price_cents / 100,
       service: row.service,
       seatsAvailable: layout.filter((s) => !s.blocked).length - occupied,
+      serviceDescription: row.service_description,
+      features: JSON.parse(row.features_json),
+      isDemo: dep.id.startsWith("demo-"),
       seatLayout: layout,
       vehicleId: dep.vehicle_id,
       terminalOrigin: dep.terminal_origin,
@@ -434,15 +442,21 @@ export class BookingStore {
       cancellation_reason: row.cancellation_reason,
       serviceRequests: this.db
         .prepare(
-          "SELECT id,kind,message,status,response,created_at,updated_at FROM service_requests WHERE reservation_code=? ORDER BY created_at DESC",
+          "SELECT id,kind,message,status,response,created_at,updated_at,response_due_at FROM service_requests WHERE reservation_code=? ORDER BY created_at DESC",
         )
         .all(row.code),
       financialCases: this.db
         .prepare(
-          "SELECT id,reason,status,response,refund_reference FROM financial_cases WHERE reservation_code=?",
+          "SELECT id,reason,status,response,refund_reference,refund_amount_cents,expected_resolution_at FROM financial_cases WHERE reservation_code=?",
         )
         .all(row.code),
       channel: row.channel,
+      confirmationEmailStatus:
+        this.db
+          .prepare(
+            "SELECT status FROM outbox WHERE reservation_code=? AND subject='Reserva confirmada · pago pendiente' ORDER BY created_at DESC LIMIT 1",
+          )
+          .get(row.code)?.status || null,
       server_now: iso(now),
     };
   }
@@ -648,7 +662,7 @@ export class BookingStore {
     return this.transaction((now) =>
       this.db
         .prepare(
-          "SELECT * FROM reservations r WHERE status!='active_session' AND (owner_hash=? OR EXISTS(SELECT 1 FROM reservation_grants g WHERE g.reservation_code=r.code AND g.owner_hash=? AND g.expires_at>?)) ORDER BY created_at DESC",
+          "SELECT * FROM reservations r WHERE (owner_hash=? OR EXISTS(SELECT 1 FROM reservation_grants g WHERE g.reservation_code=r.code AND g.owner_hash=? AND g.expires_at>?)) ORDER BY created_at DESC",
         )
         .all(owner, owner, iso(now))
         .map((r) => this.view(r, now)),

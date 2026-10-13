@@ -16,7 +16,7 @@ export default function Sidebar({ onClose }) {
     view = p.get("view") || "reservations";
   return (
     <aside className="h-full w-64 bg-fox-dark p-5 text-white">
-      <p className="mb-5 text-xl font-bold">FOXTRIP · Operación</p>
+      <p className="mb-5 text-xl font-bold">FOXbus · Operación</p>
       <p className="mb-6 text-sm">
         {user?.name} · {user?.role}
       </p>
@@ -38,7 +38,7 @@ export default function Sidebar({ onClose }) {
           ))}
       </nav>
       <Link className="mt-8 block text-sm underline" to="/">
-        Volver a FOXTRIP
+        Volver a FOXbus
       </Link>
     </aside>
   );

@@ -23,6 +23,7 @@ Los timestamps del servidor son UTC. La UI muestra fechas en hora de Perú y cal
 
 Migración 001: reservas, retenciones y pagos iniciales.
 Migración 002: salidas explícitas, vehículos, viajeros, cuentas, sesiones, accesos de recuperación, tickets, eventos financieros, atención, notificaciones, auditoría y políticas.
+Migración 003: descripción/servicios declarados, sesiones de checkout alojado y fechas de respuesta/solución. No modifica los plazos originales ni borra reservas.
 
 La migración conserva los registros anteriores. Una reserva histórica que no tenga calendario/viajeros completos requiere revisión; no se inventan datos personales para emitir un boleto.
 

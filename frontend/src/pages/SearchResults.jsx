@@ -15,6 +15,10 @@ import { ROUTES } from "../utils/constants";
 import { formatTime, formatCurrency } from "../utils/helpers";
 import { tripDuration, limaToday, formatDeadline } from "../utils/bookingTime";
 import SearchBox from "../components/landing/SearchBox";
+import { operationsService } from "../services/operationsService";
+import ServiceDetails from "../components/common/ServiceDetails";
+import ConfirmDialog from "../components/common/ConfirmDialog";
+import { clearDraft } from "../utils/bookingDraft";
 import {
   bookingErrorMessage,
   reservationService,
@@ -37,11 +41,23 @@ export default function SearchResults() {
           passengers: Number(p.get("passengers") || 1),
         };
   }, [location.state, location.search]);
-  const [trips, setTrips] = useState([]);
+  const [trips, setTrips] = useState([]),
+    [policy, setPolicy] = useState(null),
+    [sort, setSort] = useState("departure"),
+    [otherDates, setOtherDates] = useState([]),
+    [switchTarget, setSwitchTarget] = useState(null),
+    [switching, setSwitching] = useState(false);
+  useEffect(() => {
+    operationsService
+      .policy()
+      .then(setPolicy)
+      .catch(() => {});
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let active = true;
     const loadTrips = async () => {
       setLoading(true);
       setError("");
@@ -52,35 +68,85 @@ export default function SearchResults() {
           searchData.date,
           searchData.passengers,
         );
+        if (!active) return;
         setTrips(data);
+        if (!data.length)
+          operationsService
+            .upcomingDates(searchData)
+            .then((d) => {
+              if (active) setOtherDates(d);
+            })
+            .catch(() => {
+              if (active) setOtherDates([]);
+            });
+        else setOtherDates([]);
       } catch (e) {
+        if (!active) return;
         setTrips([]);
         setError(bookingErrorMessage(e));
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     loadTrips();
+    return () => {
+      active = false;
+    };
   }, [searchData]);
 
-  const handleSelect = async (trip) => {
-    const previous = useCartStore.getState().bookingSession;
-    if (previous?.status === "active_session") {
-      try {
-        await reservationService.cancelReservation(previous.code);
-      } catch (e) {
-        setError(bookingErrorMessage(e));
-        return;
-      }
-    }
+  const chooseTrip = (trip) => {
     selectTrip(trip);
     setTrip({ ...trip, passengerCount: searchData.passengers });
     navigate(ROUTES.SEAT_SELECTION);
   };
-
+  const handleSelect = (trip) => {
+    const previous = useCartStore.getState().bookingSession;
+    if (previous?.status === "active_session") {
+      setSwitchTarget(trip);
+      return;
+    }
+    chooseTrip(trip);
+  };
+  const switchTrip = async () => {
+    setSwitching(true);
+    try {
+      const previous = useCartStore.getState().bookingSession;
+      if (previous?.status === "active_session") {
+        await reservationService.cancelReservation(previous.code);
+        clearDraft(previous.code);
+      }
+      chooseTrip(switchTarget);
+    } catch (e) {
+      setError(bookingErrorMessage(e));
+      setSwitchTarget(null);
+    } finally {
+      setSwitching(false);
+    }
+  };
+  const orderedTrips = [...trips].sort((a, b) =>
+    sort === "price"
+      ? a.price - b.price
+      : sort === "duration"
+        ? a.durationMinutes - b.durationMinutes
+        : Date.parse(a.departure_at) - Date.parse(b.departure_at),
+  );
   // El Header y el Footer los añade el PublicLayout.
   return (
     <main className="bg-gray-50">
+      {switchTarget && (
+        <ConfirmDialog
+          title="¿Cambiar de viaje?"
+          confirmLabel="Sí, cambiar viaje"
+          busy={switching}
+          onClose={() => setSwitchTarget(null)}
+          onConfirm={switchTrip}
+        >
+          <p>
+            Se cancelará la selección anterior y se liberarán sus asientos. Se
+            iniciará otra sesión para el viaje elegido.
+          </p>
+        </ConfirmDialog>
+      )}
       <div className="container-fox py-10">
         <h1 className="font-display font-bold text-2xl text-gray-800 mb-1">
           Viajes disponibles
@@ -113,6 +179,29 @@ export default function SearchResults() {
           <span>{searchData.passengers || 1} pasajero(s)</span>
         </div>
 
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <label htmlFor="trip-sort" className="text-sm font-semibold">
+            Ordenar viajes
+          </label>
+          <select
+            id="trip-sort"
+            className="rounded-lg border p-3"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="departure">Hora de salida</option>
+            <option value="price">Menor precio</option>
+            <option value="duration">Menor duración</option>
+          </select>
+          <p className="text-sm text-gray-600">
+            Fecha: {searchData.date} · Hora de Perú
+          </p>
+        </div>
+        <p className="mb-5 text-sm text-gray-600">
+          La reserva con pago diferido cierra 10 minutos + 2 horas + el tiempo
+          de presentación antes de salir. No se ofrecen aquí compras de última
+          hora fuera de ese plazo.
+        </p>
         {loading ? (
           <Loading text="Buscando viajes..." />
         ) : (
@@ -123,10 +212,36 @@ export default function SearchResults() {
                 Prueba otro día.
               </p>
             )}
-            {trips.map((trip) => (
+            {!loading && !error && !trips.length && otherDates.length > 0 && (
+              <div className="rounded-xl bg-blue-50 p-4">
+                <p className="mb-3 font-semibold">
+                  Otras fechas con salidas disponibles
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {otherDates.map((d) => (
+                    <button
+                      key={d.date}
+                      className="min-h-11 rounded-lg border bg-white px-3"
+                      onClick={() =>
+                        navigate(
+                          "/resultados?" +
+                            new URLSearchParams({
+                              ...searchData,
+                              date: d.date,
+                            }),
+                        )
+                      }
+                    >
+                      {d.date} · {d.count} salida(s)
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {orderedTrips.map((trip) => (
               <div
                 key={trip.id}
-                className="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-fox-lg transition-shadow"
+                className="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row md:flex-wrap items-center justify-between gap-6 hover:shadow-fox-lg transition-shadow"
               >
                 {/* Hora y ruta */}
                 <div className="flex items-center gap-6">
@@ -146,10 +261,16 @@ export default function SearchResults() {
                     <p className="mt-2 text-sm font-semibold text-gray-700">
                       {tripDuration(trip)}
                     </p>
-                    <p className="mt-1 text-xs text-gray-600">
+                    <p className="mt-1 text-sm">
+                      Salida: {formatDeadline(trip.departure_at)} (Perú)
+                    </p>
+                    <p className="text-sm">
+                      Llegada estimada: {formatDeadline(trip.arrival_at)} (Perú)
+                    </p>
+                    <p className="mt-1 text-sm text-gray-600">
                       Salida desde: {trip.terminalOrigin}
                     </p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-sm text-gray-600">
                       Reservas hasta: {formatDeadline(trip.sales_closes_at)}{" "}
                       (Perú)
                     </p>
@@ -176,7 +297,11 @@ export default function SearchResults() {
                     <p className="text-fox-pink font-bold text-2xl">
                       {formatCurrency(trip.price)}
                     </p>
-                    <p className="text-xs text-gray-400">por persona</p>
+                    <p className="text-sm text-gray-600">por persona</p>
+                    <p className="mt-2 font-semibold">
+                      Total {searchData.passengers} viajero(s):{" "}
+                      {formatCurrency(trip.price * searchData.passengers)}
+                    </p>
                   </div>
                   <button
                     onClick={() => handleSelect(trip)}
@@ -186,6 +311,12 @@ export default function SearchResults() {
                     Seleccionar
                   </button>
                 </div>
+                <details className="w-full text-left md:basis-full">
+                  <summary className="cursor-pointer py-3 font-semibold text-fox-pink">
+                    Ver servicio, equipaje y condiciones
+                  </summary>
+                  <ServiceDetails trip={trip} policy={policy} />
+                </details>
               </div>
             ))}
           </div>

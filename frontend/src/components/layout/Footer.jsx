@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import OperatorContact from "../common/OperatorContact";
 import { operationsService } from "../../services/operationsService";
 export default function Footer() {
   const [policy, setPolicy] = useState(null);
@@ -15,7 +16,7 @@ export default function Footer() {
         <div className="grid gap-8 md:grid-cols-3">
           <div>
             <p className="mb-4 text-xl font-bold">
-              FOX<span className="text-fox-pink">TRIP</span>
+              FOX<span className="text-fox-pink-light">bus</span>
             </p>
             <p className="text-sm text-gray-300">
               {policy?.legalName ||
@@ -27,15 +28,10 @@ export default function Footer() {
           </div>
           <div className="space-y-3 text-sm">
             <h2 className="font-bold">Atención del operador</h2>
-            <p>
-              {policy?.supportEmail ||
-                "Correo de atención pendiente de configurar"}
-            </p>
-            <p>{policy?.supportPhone || "Teléfono pendiente de configurar"}</p>
-            <p>
-              {policy?.address ||
-                "Domicilio del operador pendiente de configurar"}
-            </p>
+            <OperatorContact policy={policy} compact />
+            <Link className="block underline" to="/ayuda">
+              Ayuda y contacto
+            </Link>
             <Link className="block underline" to="/mis-viajes">
               Solicitudes y reclamos
             </Link>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import OperatorContact from "../components/common/OperatorContact";
 import { operationsService } from "../services/operationsService";
 import { bookingErrorMessage } from "../services/reservationService";
 export default function Policies() {
@@ -17,18 +18,7 @@ export default function Policies() {
         {error && <p role="alert">{error}</p>}
         {policy && (
           <>
-            <p>
-              Operador: {policy.legalName || "Pendiente de configurar"} · RUC:{" "}
-              {policy.taxId || "Pendiente de configurar"}
-            </p>
-            <p>
-              Domicilio: {policy.address || "Pendiente de configurar"}.
-              Atención:{" "}
-              {policy.supportEmail ||
-                policy.supportPhone ||
-                "Pendiente de configurar"}
-              .
-            </p>
+            <OperatorContact policy={policy} />
             {!policy.taxId && (
               <p className="rounded-xl bg-amber-50 p-4">
                 Entorno de desarrollo. El operador debe completar y revisar sus
@@ -70,6 +60,28 @@ export default function Policies() {
               derechos del consumidor y publicar sus condiciones comerciales;
               esta pantalla no sustituye su revisión legal.
             </p>
+            <p>
+              <strong>Cambios:</strong>{" "}
+              {policy.changePolicy ||
+                "No hay condiciones comerciales de cambios publicadas para una compra real."}
+            </p>
+            <p>
+              <strong>Devoluciones:</strong>{" "}
+              {policy.refundPolicy ||
+                "No hay condiciones comerciales de devolución publicadas para una compra real."}
+            </p>
+            <p>
+              {policy.serviceResponseHours
+                ? "Primera respuesta a solicitudes: hasta " +
+                  policy.serviceResponseHours +
+                  " horas calendario desde su registro."
+                : "No hay un plazo de primera respuesta publicado."}
+            </p>
+            {policy.paymentInstructions && (
+              <p className="whitespace-pre-wrap">
+                Medios de pago: {policy.paymentInstructions}
+              </p>
+            )}
             <h2 className="font-bold">Datos personales</h2>
             <p>
               Se usan los datos del comprador y viajeros para gestionar la
@@ -86,7 +98,7 @@ export default function Policies() {
                 : "pendiente de aprobación del operador; no se elimina automáticamente tu historial."}
             </p>
             <p className="text-sm text-gray-500">
-              Versión aceptada: {policy.version}. El operador debe validar este
+              Versión publicada: {policy.version}. El operador debe validar este
               contenido, sus deberes de protección de datos y su Libro de
               Reclamaciones antes del lanzamiento.
             </p>

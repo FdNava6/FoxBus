@@ -89,6 +89,12 @@ const selectTrip = async (page) => {
     .getByRole("button", { name: "Seleccionar", exact: true })
     .first()
     .click();
+  if (
+    await page.getByRole("alertdialog", { name: "¿Cambiar de viaje?" }).count()
+  )
+    await page
+      .getByRole("button", { name: "Sí, cambiar viaje", exact: true })
+      .click();
   await page
     .getByRole("timer", { name: "Tiempo restante para confirmar" })
     .waitFor();
@@ -200,6 +206,49 @@ try {
     fullPage: true,
   });
 
+  // Borrador: recarga, vuelta a asientos y retomar desde Mis viajes.
+  await page.getByRole("button", { name: "Continuar a datos" }).click();
+  await page.getByLabel("Nombre del comprador").fill("Borrador de prueba");
+  await page
+    .getByLabel("Nombre del viajero 1", { exact: true })
+    .fill("Viajero conservado");
+  await page
+    .getByLabel("Documento del viajero 1", { exact: true })
+    .fill("87654321");
+  await page.reload();
+  await expect(page.getByLabel("Nombre del comprador")).toHaveValue(
+    "Borrador de prueba",
+  );
+  await expect(
+    page.getByLabel("Documento del viajero 1", { exact: true }),
+  ).toHaveValue("87654321");
+  assert.equal(
+    (await currentSession(page)).session_expires_at,
+    original.session_expires_at,
+  );
+  await page.getByRole("button", { name: "Volver a asientos" }).click();
+  await page.getByRole("button", { name: "Continuar a datos" }).click();
+  await expect(
+    page.getByLabel("Nombre del viajero 1", { exact: true }),
+  ).toHaveValue("Viajero conservado");
+  await page.getByRole("link", { name: "Mis viajes", exact: true }).click();
+  await page.getByText("Por confirmar", { exact: true }).last().waitFor();
+  await page
+    .getByRole("button", { name: "Continuar reserva", exact: true })
+    .click();
+  await expect(page.getByLabel("Nombre del comprador")).toHaveValue(
+    "Borrador de prueba",
+  );
+  assert.equal((await currentSession(page)).code, original.code);
+  assert.equal(
+    (await currentSession(page)).session_expires_at,
+    original.session_expires_at,
+  );
+  await page.screenshot({
+    path: resolve(screenshots, "11-draft-restored.png"),
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Volver a asientos" }).click();
   const otherContext = await browser.newContext();
   const other = await otherContext.newPage();
   await selectTrip(other);
@@ -252,6 +301,30 @@ try {
     (await currentSession(page)).payment_deadline_at,
     pending.payment_deadline_at,
   );
+  await page
+    .getByText("No hay un medio de pago real publicado.", { exact: false })
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Pagar online", exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByRole("link", { name: "Ver y guardar comprobante de reserva" })
+    .click();
+  await page
+    .getByRole("heading", { name: "Comprobante de reserva", exact: true })
+    .waitFor();
+  await page.getByText(pending.code, { exact: true }).waitFor();
+  await page.screenshot({
+    path: resolve(screenshots, "12-reservation-receipt.png"),
+    fullPage: true,
+  });
+  await page.goto(origin + "/checkout");
+  await page
+    .getByRole("heading", { name: "Reserva confirmada · pago pendiente" })
+    .waitFor();
   await page.getByRole("button", { name: "Simular pago (sin cobro)" }).click();
   await page.getByRole("heading", { name: "Pago registrado" }).waitFor();
   await page.getByRole("link", { name: "Ver e imprimir boletos QR" }).click();
@@ -264,7 +337,17 @@ try {
   offset += PAYMENT_DURATION_MS + 1000;
   store.expireReservations();
   assert.equal(store.getSeats(1, pending.date).includes("1A"), true);
-  store.requestRecovery({ code: pending.code, email: "ana@example.test" });
+  await other.goto(origin + "/recuperar");
+  await other
+    .getByLabel("Correo del comprador", { exact: true })
+    .fill("ana@example.test");
+  await other
+    .getByRole("button", { name: "Solicitar enlace de reserva", exact: true })
+    .click();
+  await other
+    .getByRole("status")
+    .filter({ hasText: "Si hay reservas asociadas" })
+    .waitFor();
   const recoveryMail = store.db
     .prepare(
       "SELECT body FROM outbox WHERE subject='Recuperar reserva' ORDER BY created_at DESC LIMIT 1",
@@ -282,6 +365,31 @@ try {
   const voluntary = await currentSession(page);
   await page
     .getByRole("button", { name: "Cancelar reserva", exact: true })
+    .click();
+  await page
+    .getByRole("alertdialog", { name: "¿Cancelar esta reserva?" })
+    .waitFor();
+  assert.equal(
+    store.getReservation(
+      voluntary.code,
+      store.db
+        .prepare("SELECT owner_hash FROM reservations WHERE code=?")
+        .get(voluntary.code).owner_hash,
+    ).status,
+    "pending_payment",
+  );
+  await page
+    .getByRole("button", { name: "Volver sin cambios", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Cancelar reserva", exact: true })
+    .click();
+  await page.screenshot({
+    path: resolve(screenshots, "13-cancel-confirmation.png"),
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Sí, cancelar reserva", exact: true })
     .click();
   await page.getByRole("heading", { name: "Reserva cancelada" }).waitFor();
   assert.equal(store.getSeats(1, voluntary.date).includes("1B"), false);
@@ -441,6 +549,35 @@ try {
     path: resolve(screenshots, "10-mobile-operations.png"),
     fullPage: true,
   });
+  // Ayuda contextual y móvil: respuestas accionables, no etiquetas académicas.
+  await devicePage.goto(origin + "/");
+  await devicePage
+    .getByRole("button", { name: "Chatear ahora", exact: true })
+    .click();
+  await devicePage
+    .getByRole("button", { name: "¿Cómo compro un pasaje?", exact: true })
+    .click();
+  await devicePage
+    .getByRole("link", { name: "Empezar búsqueda", exact: true })
+    .waitFor();
+  await devicePage.getByText(/1. Busca origen/).waitFor();
+  await devicePage.setViewportSize({ width: 390, height: 844 });
+  await noHorizontalOverflow(devicePage);
+  const chat = await devicePage.locator("#foxbot-dialog").boundingBox();
+  const bottomNav = await devicePage
+    .getByRole("navigation", { name: "Navegación inferior" })
+    .boundingBox();
+  assert.ok(
+    chat.y + chat.height <= bottomNav.y,
+    "FoxBot no debe tapar la navegación móvil",
+  );
+  await devicePage.screenshot({
+    path: resolve(screenshots, "14-mobile-help.png"),
+    fullPage: true,
+  });
+  await devicePage
+    .getByRole("button", { name: "Cerrar ayuda de FoxBot" })
+    .click();
   assert.deepEqual(errors, []);
   console.log(
     "E2E OK: duración, bloqueo entre navegadores, recargas, pago, cancelación, ambos vencimientos, móvil y fallo de API.",

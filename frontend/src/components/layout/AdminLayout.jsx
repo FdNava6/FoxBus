@@ -32,7 +32,7 @@ export default function AdminLayout() {
           >
             Menú
           </button>
-          <p className="font-bold">Operación FOXTRIP</p>
+          <p className="font-bold">Operación FOXbus</p>
           <p className="text-sm">{user?.role}</p>
         </header>
         <main className="p-4 lg:p-6">

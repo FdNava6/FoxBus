@@ -1,4 +1,4 @@
-# FOXTRIP
+# FOXbus
 
 Prototipo académico de una plataforma web para mejorar la trazabilidad del pasaje en viajes interprovinciales, desde la búsqueda y reserva hasta el abordaje y la atención posventa.
 
@@ -12,7 +12,7 @@ Para el Avance 1 se propone validar esta problemática en un piloto de la ruta *
 
 ## Propuesta de innovación
 
-FOXTRIP plantea unificar en una sola experiencia:
+FOXbus plantea unificar en una sola experiencia:
 
 - búsqueda de viajes y selección visual de asientos;
 - reserva digital con estado trazable;
@@ -102,7 +102,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-En `backend`, ejecutar `npm ci`, `npm test` y `npm run load:check`. El E2E usa una base aislada, adelanta el reloj y prueba pagos, recuperación, QR y operación. [Reglas](docs/RESERVATION_DEADLINES.md), [producción](docs/PRODUCTION_READINESS.md) y [piloto comercial](docs/PILOTO_Y_MERCADO.md).
+En `backend`, ejecutar `npm ci`, `npm test` y `npm run load:check`. El E2E usa una base aislada, adelanta el reloj y prueba pagos, recuperación, QR y operación. [Mejoras para el pasajero](docs/PASSENGER_EXPERIENCE.md), [Reglas](docs/RESERVATION_DEADLINES.md), [producción](docs/PRODUCTION_READINESS.md) y [piloto comercial](docs/PILOTO_Y_MERCADO.md).
 
 ## Documentación del Avance 1
 
