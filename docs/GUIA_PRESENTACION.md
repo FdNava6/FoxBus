@@ -20,6 +20,8 @@ Curso: Innovación y Transformación Digital. Docente: Carlos Fernando Zamora Gu
 
 Usuario que reserva: pasajero o comprador de varios viajeros. Cliente comercial a validar: operador de transporte. Ruta inicial: Lima–Trujillo. No afirmar que todos los operadores tienen el problema ni citar entrevistas, cifras o acuerdos que todavía no se realizaron.
 
+Aclaración oral antes del recorrido: “Mostraremos una demostración funcional con datos ficticios. No realiza cobros ni emite pasajes válidos para viajar”. Los avisos no se repiten en las pantallas del modo de exposición.
+
 ## 2. Solución e innovación propuesta
 
 “La propuesta no se limita a vender un pasaje: web y ventanilla comparten inventario; una misma reserva permite consultar el plazo, el QR y las solicitudes posteriores”.
@@ -33,7 +35,7 @@ Mostrar el recorrido reserva → pago simulado → boleto de prueba → atenció
 3. Seleccionar un asiento y señalar el contador de 10 minutos.
 4. Completar datos ficticios y confirmar sin pagar.
 5. Mostrar el plazo de 2 horas, con cancelación disponible.
-6. Pulsar “Simular pago (sin cobro)” y guardar el QR identificado como prueba.
+6. Pulsar “Confirmar pago” y mostrar el QR. Explicar oralmente que se registró una simulación, no un cobro. En el modo de exposición local los avisos visuales están ocultos.
 
 Frase: “Los estados y los asientos se guardan en SQLite. No estamos cobrando ni emitiendo un pasaje válido para viajar”.
 

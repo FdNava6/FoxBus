@@ -302,9 +302,12 @@ export function createApi({
             occurredAt: data.body.occurredAt,
           }),
         );
-      } else if (method === "POST" && path === "/api/chatbot/message")
-        result = store.chatbot((await body()).message);
-      else if (method === "GET" && path === "/api/dev/mailbox") {
+      } else if (method === "POST" && path === "/api/chatbot/message") {
+        const data = await body();
+        result = store.chatbot(data.message, {
+          presentation: data.presentation === true,
+        });
+      } else if (method === "GET" && path === "/api/dev/mailbox") {
         if (!devMailbox) fail(404, "NOT_FOUND", "Ruta no encontrada.");
         result = store.db
           .prepare(

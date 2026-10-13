@@ -7,6 +7,7 @@ import Button from "../components/common/Button";
 import { Terminal } from "../components/common/TripSummary";
 import OperatorContact from "../components/common/OperatorContact";
 import SimulationNotice from "../components/common/SimulationNotice";
+import { presentationMode } from "../utils/presentationMode";
 export default function TicketPage() {
   const { code } = useParams(),
     [tickets, setTickets] = useState([]),
@@ -76,12 +77,12 @@ export default function TicketPage() {
               ? "Abordaje registrado"
               : t.trip.status === "departed"
                 ? "Viaje finalizado · boleto histórico"
-                : t.simulation || t.trip.isDemo
+                : (t.simulation || t.trip.isDemo) && !presentationMode
                   ? "Pago simulado · validación de prueba"
                   : "Pagado · listo para validación de abordaje"}
           </p>
           <p className="mt-4 text-sm">
-            {t.simulation || t.trip.isDemo
+            {(t.simulation || t.trip.isDemo) && !presentationMode
               ? "El QR permite ensayar una única validación en el piloto; no sirve para abordar un bus real. Usa únicamente documentos ficticios."
               : "Presenta este boleto y tu documento. El QR admite un solo abordaje."}
           </p>

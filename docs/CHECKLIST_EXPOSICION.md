@@ -8,10 +8,10 @@ Esta lista se completa en la laptop que se usará en clase. Todavía no se verif
 - [ ] Confirmar Node 24 con `node --version` y npm disponible.
 - [ ] Ejecutar `npm ci` dentro de backend y frontend con conexión a internet. No dejar esta descarga para el inicio de la expo.
 - [ ] Arrancar backend con `npm run pilot` y frontend con `npm run dev -- --host localhost --port 5173 --strictPort`.
-- [ ] Ver http://localhost:5173/piloto e identificar el aviso de prueba sin cobros.
+- [ ] Abrir http://localhost:5173/. En desarrollo está activo el modo de exposición sin avisos del piloto; verificar en /api/health del backend que app_mode siga siendo pilot. Esto cambia la presentación, no habilita cobros reales.
 - [ ] Preparar una cuenta ficticia del personal con `npm run pilot:admin`, según la guía. Sus credenciales se crean privadamente en esa laptop; no son las de otra computadora ni se publican en GitHub.
 - [ ] Buscar Lima–Trujillo para un día posterior a la exposición, con venta abierta. Las salidas se publican para siete días al iniciar el piloto.
-- [ ] Ensayar un pasajero ficticio, confirmación, pago simulado y boleto de prueba. Usar nombre inventado, correo demo@example.test, teléfono 900000000, DNI 12345678 y nacimiento adulto ficticio 1990-01-01.
+- [ ] Ensayar un pasajero ficticio, confirmación, botón “Confirmar pago” y boleto QR. El pago continúa simulado en el servidor. Usar nombre inventado, correo demo@example.test, teléfono 900000000, DNI 12345678 y nacimiento adulto ficticio 1990-01-01.
 - [ ] Ensayar una reserva como invitado y luego una cuenta: debe seguir apareciendo en Mis viajes y conservar sus plazos.
 - [ ] Ensayar dos ventas diferentes de ventanilla: códigos distintos, dos asientos distintos y formulario limpio tras confirmar. Una repetición del mismo envío no debe crear otra venta.
 - [ ] Probar búsqueda por código, filtros y mapa ocupado desde el panel. No desactivar al administrador utilizado para exponer.

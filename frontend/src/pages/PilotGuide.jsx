@@ -4,6 +4,7 @@ import { operationsService } from "../services/operationsService";
 import { bookingErrorMessage } from "../services/reservationService";
 import Button from "../components/common/Button";
 import { formatDeadline } from "../utils/bookingTime";
+import { presentationMode } from "../utils/presentationMode";
 
 export default function PilotGuide() {
   const [health, setHealth] = useState(null),
@@ -27,6 +28,42 @@ export default function PilotGuide() {
       setBusy(false);
     }
   };
+  if (presentationMode)
+    return (
+      <main className="container-fox space-y-6 py-8">
+        <h1 className="text-2xl font-bold">Mis mensajes</h1>
+        <p>Consulta los mensajes asociados a tu cuenta o a este navegador.</p>
+        {error && (
+          <p role="alert" className="text-red-700">
+            {error}
+          </p>
+        )}
+        <Button disabled={busy} onClick={mailbox}>
+          {busy ? "Consultando mensajes…" : "Ver mis mensajes"}
+        </Button>
+        {messages?.length === 0 && (
+          <p>No hay mensajes asociados a esta sesión.</p>
+        )}
+        {messages?.map((message) => (
+          <article
+            key={message.id}
+            className="space-y-2 rounded-2xl border bg-white p-5"
+          >
+            <h2 className="font-bold">{message.subject}</h2>
+            <p className="text-sm">{formatDeadline(message.created_at)}</p>
+            <p className="whitespace-pre-wrap break-words text-sm">
+              {message.body}
+            </p>
+          </article>
+        ))}
+        <Link
+          to="/mis-viajes"
+          className="font-semibold text-fox-pink underline"
+        >
+          Volver a Mis viajes
+        </Link>
+      </main>
+    );
   return (
     <main className="container-fox space-y-6 py-8">
       <h1 className="text-2xl font-bold">Piloto sin cobros reales</h1>

@@ -31,6 +31,10 @@ const store = new OperationsStore(":memory:", {
   clock: () => Date.now() + offset,
 });
 const pilotMode = process.env.FOXBUS_E2E_MODE === "pilot";
+const presentationMode = process.env.FOXBUS_E2E_PRESENTATION === "true";
+const paymentLabel = presentationMode
+  ? "Confirmar pago"
+  : "Simular pago (sin cobro)";
 bindDatabaseMode(store, pilotMode ? "pilot" : "development");
 const travelDate = new Date(Date.parse(limaDate(Date.now())) + 2 * 86400000)
   .toISOString()
@@ -65,7 +69,11 @@ const vite = spawn(
     "--strictPort",
   ],
   {
-    env: { ...process.env, VITE_API_URL: `http://localhost:${apiPort}/api` },
+    env: {
+      ...process.env,
+      VITE_API_URL: `http://localhost:${apiPort}/api`,
+      VITE_PRESENTATION_MODE: String(presentationMode),
+    },
     stdio: "pipe",
   },
 );
@@ -79,7 +87,11 @@ vite.stderr.on("data", (d) => {
 let browser;
 let page;
 const screenshots = resolve(
-  pilotMode ? "test-results/pilot-flow" : "test-results/reservation-flow",
+  presentationMode
+    ? "test-results/presentation-flow"
+    : pilotMode
+      ? "test-results/pilot-flow"
+      : "test-results/reservation-flow",
 );
 mkdirSync(screenshots, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -195,6 +207,10 @@ try {
     .getByText("Duración estimada: 9 horas", { exact: true })
     .first()
     .waitFor();
+  if (presentationMode)
+    await expect(
+      page.getByText(/Piloto sin cobros|Modo de prueba/),
+    ).toHaveCount(0);
   const footerCopy = await page.locator("footer").innerText();
   assert.equal(footerCopy.includes("Proyecto académico"), false);
   assert.equal(footerCopy.includes("Entorno de desarrollo"), false);
@@ -307,7 +323,27 @@ try {
     (await currentSession(page)).payment_deadline_at,
     pending.payment_deadline_at,
   );
-  await page.getByText("Solo pagos de prueba.", { exact: false }).waitFor();
+  if (presentationMode) {
+    await expect(
+      page.getByText(
+        /Solo pagos de prueba|Piloto sin cobros|Modo de prueba|Simular pago/,
+      ),
+    ).toHaveCount(0);
+    const blockedCheckout = await page.request.post(
+      `http://localhost:${apiPort}/api/reservations/${pending.code}/start-checkout`,
+      {
+        data: { presentation: true },
+        headers: {
+          "X-Booking-Client": await page.evaluate(() =>
+            localStorage.getItem("foxbus_booking_client"),
+          ),
+        },
+      },
+    );
+    assert.equal(blockedCheckout.status(), 503);
+    assert.equal((await blockedCheckout.json()).error, "CHECKOUT_UNAVAILABLE");
+  } else
+    await page.getByText("Solo pagos de prueba.", { exact: false }).waitFor();
   assert.equal(
     await page
       .getByRole("button", { name: "Pagar online", exact: true })
@@ -321,6 +357,12 @@ try {
     .getByRole("heading", { name: "Comprobante de reserva", exact: true })
     .waitFor();
   await page.getByText(pending.code, { exact: true }).waitFor();
+  if (presentationMode)
+    await expect(
+      page.getByText(
+        /DOCUMENTO DE PRUEBA|Esta reserva, su pago y sus boletos son simulaciones/,
+      ),
+    ).toHaveCount(0);
   await page.screenshot({
     path: resolve(screenshots, "12-reservation-receipt.png"),
     fullPage: true,
@@ -329,7 +371,7 @@ try {
   await page
     .getByRole("heading", { name: "Reserva confirmada · pago pendiente" })
     .waitFor();
-  await page.getByRole("button", { name: "Simular pago (sin cobro)" }).click();
+  await page.getByRole("button", { name: paymentLabel }).click();
   await page.getByRole("heading", { name: "Pago registrado" }).waitFor();
   await page.getByRole("link", { name: "Ver e imprimir boletos QR" }).click();
   await page.getByRole("heading", { name: "Boletos de viaje" }).waitFor();
@@ -787,11 +829,17 @@ try {
   if (pilotMode) {
     await staff
       .getByRole("button", {
-        name: "Consultar informe del piloto",
+        name: presentationMode
+          ? "Consultar actividad"
+          : "Consultar informe del piloto",
         exact: true,
       })
       .click();
-    await expect(staff.getByText(/Pagos simulados:/)).toBeVisible();
+    await expect(
+      staff.getByText(
+        presentationMode ? /Pagos registrados:/ : /Pagos simulados:/,
+      ),
+    ).toBeVisible();
     await expect(staff.getByText(/Integridad de la base: ok/)).toBeVisible();
     await noHorizontalOverflow(staff);
   }
@@ -804,7 +852,11 @@ try {
     .getByRole("button", { name: "¿Cómo compro un pasaje?", exact: true })
     .click();
   await devicePage
-    .getByRole("link", { name: "Empezar búsqueda", exact: true })
+    .locator("#foxbot-dialog")
+    .getByRole("link", {
+      name: presentationMode ? "Buscar viajes" : "Empezar búsqueda",
+      exact: true,
+    })
     .waitFor();
   await devicePage.getByText(/1. Busca origen/).waitFor();
   await devicePage.setViewportSize({ width: 390, height: 844 });
@@ -825,17 +877,29 @@ try {
     .getByRole("button", { name: "Cerrar ayuda de FoxBot" })
     .click();
   if (pilotMode) {
+    if (presentationMode) await devicePage.goto(origin + "/piloto");
+    else
+      await devicePage
+        .getByRole("link", { name: "Guía y mensajes de prueba", exact: true })
+        .click();
     await devicePage
-      .getByRole("link", { name: "Guía y mensajes de prueba", exact: true })
-      .click();
-    await devicePage
-      .getByRole("heading", { name: "Piloto sin cobros reales", exact: true })
+      .getByRole("heading", {
+        name: presentationMode ? "Mis mensajes" : "Piloto sin cobros reales",
+        exact: true,
+      })
       .waitFor();
     await devicePage
-      .getByRole("button", { name: "Ver mis mensajes de prueba", exact: true })
+      .getByRole("button", {
+        name: presentationMode
+          ? "Ver mis mensajes"
+          : "Ver mis mensajes de prueba",
+        exact: true,
+      })
       .click();
     await expect(
-      devicePage.getByText(/Guardado localmente ·/).first(),
+      presentationMode
+        ? devicePage.getByRole("article").first()
+        : devicePage.getByText(/Guardado localmente ·/).first(),
     ).toBeVisible();
     await noHorizontalOverflow(devicePage);
     await devicePage.screenshot({
@@ -843,16 +907,24 @@ try {
       fullPage: true,
     });
     await devicePage.goto(origin + "/reservas/" + accountBooking.code);
-    await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+    if (presentationMode)
+      await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toHaveCount(0);
+    else
+      await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
     await devicePage.emulateMedia({ media: "print" });
-    await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+    if (presentationMode)
+      await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toHaveCount(0);
+    else
+      await expect(devicePage.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
     await devicePage.emulateMedia({ media: "screen" });
     const receipt = await devicePage.request.get(
       "http://localhost:" + apiPort + "/api/health",
     );
     assert.equal((await receipt.json()).app_mode, "pilot");
     console.log(
-      "PILOTO E2E OK: base aislada, mensajes propios, guía móvil y marca imprimible sin validez para viajar.",
+      presentationMode
+        ? "EXPOSICION E2E OK: pantallas e impresión sin avisos; API y base conservan piloto y checkout real bloqueado."
+        : "PILOTO E2E OK: base aislada, mensajes propios, guía móvil y marca imprimible sin validez para viajar.",
     );
   }
   assert.deepEqual(errors, []);
@@ -910,14 +982,16 @@ try {
     linked.payment_deadline_at,
     guestBeforeSignup.payment_deadline_at,
   );
-  await signup
-    .getByRole("button", { name: "Simular pago (sin cobro)", exact: true })
-    .click();
+  await signup.getByRole("button", { name: paymentLabel, exact: true }).click();
   await signup
     .getByRole("link", { name: "Ver boletos QR", exact: true })
     .click();
   await signup.getByRole("img", { name: /Código QR del boleto/ }).waitFor();
-  await expect(signup.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
+  if (presentationMode)
+    await expect(
+      signup.getByText(/DOCUMENTO DE PRUEBA|Pago simulado|sin validez/i),
+    ).toHaveCount(0);
+  else await expect(signup.getByText(/DOCUMENTO DE PRUEBA/)).toBeVisible();
   await pauseDemo();
   await signup.screenshot({
     path: resolve(screenshots, "16-guest-linked-ticket.png"),

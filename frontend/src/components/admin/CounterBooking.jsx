@@ -11,6 +11,7 @@ import Button from "../common/Button";
 import ConfirmDialog from "../common/ConfirmDialog";
 import ReservationCode from "../common/ReservationCode";
 import SeatPicker from "./SeatPicker";
+import { presentationMode } from "../../utils/presentationMode";
 
 const emptyBuyer = () => ({ name: "", email: "", phone: "" });
 const minor = (birth, date) =>
@@ -194,7 +195,7 @@ export default function CounterBooking({
               Nueva reserva de ventanilla
             </Button>
           </div>
-          {pilotMode && (
+          {pilotMode && !presentationMode && (
             <p className="rounded-lg bg-blue-50 p-3 text-sm">
               Solo prueba: usa viajeros ficticios y correos @example.test. No
               recibas dinero real.

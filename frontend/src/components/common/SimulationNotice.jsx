@@ -1,4 +1,6 @@
+import { presentationMode } from "../../utils/presentationMode";
 export default function SimulationNotice({ className = "" }) {
+  if (presentationMode) return null;
   return (
     <p
       className={

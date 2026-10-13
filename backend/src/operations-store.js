@@ -876,10 +876,44 @@ export class OperationsStore extends BookingStore {
     });
     return next;
   }
-  chatbot(message) {
+  chatbot(message, { presentation = false } = {}) {
     const p = this.policy(),
       m = String(message || "").toLowerCase();
     const action = (label, to) => ({ label, to });
+    // Texto neutro para la exposición: solo cambia orientación y enlaces.
+    // El piloto conserva todos sus bloqueos de cobro y correo externos.
+    if (this.pilotMode && presentation === true) {
+      if (/pago|pagar|tarjeta|yape|plin/.test(m))
+        return {
+          message:
+            "Confirma tu reserva, abre Mis viajes y pulsa Confirmar pago antes de que venza el plazo de 2 horas. Luego podrás consultar el comprobante y el código QR de cada viajero.",
+          actions: [action("Consultar mi reserva", "/mis-viajes")],
+        };
+      if (/recuper|codigo|código|contrase|correo|buz[oó]n/.test(m))
+        return {
+          message:
+            "Solicita la recuperación con el correo de la reserva y consulta Mis mensajes desde el navegador o cuenta que la controla. El enlace es de un solo uso y vence en 30 minutos. No se muestran mensajes de otras personas.",
+          actions: [
+            action("Recuperar mi reserva", "/recuperar"),
+            action("Mis mensajes", "/piloto"),
+          ],
+        };
+      if (/devol|reprogram|retras|cancel|reclamo/.test(m))
+        return {
+          message:
+            "En Mis viajes puedes cancelar una reserva pendiente de pago o registrar una solicitud de cambio, devolución o reclamo. Consulta allí el seguimiento y la respuesta del personal.",
+          actions: [action("Gestionar mi reserva", "/mis-viajes")],
+        };
+      if (/compra|pasaje|reserva/.test(m))
+        return {
+          message:
+            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa los datos antes de que pasen 10 minutos. 3. Confirma tu reserva: cuentas con 2 horas para completar el pago o cancelar. 4. Consulta el comprobante y el QR en Mis viajes.",
+          actions: [
+            action("Buscar viajes", "/resultados"),
+            action("Mis viajes", "/mis-viajes"),
+          ],
+        };
+    }
     if (this.pilotMode) {
       if (/pago|pagar|tarjeta|yape|plin/.test(m))
         return {

@@ -58,6 +58,7 @@ jobs:
           npm ci --prefix ../backend
           npm run test:e2e
           npm run test:pilot
+          npm run test:presentation
 
       - name: Booking screenshots
         if: always()
@@ -67,3 +68,4 @@ jobs:
           path: |
             frontend/test-results/reservation-flow
             frontend/test-results/pilot-flow
+            frontend/test-results/presentation-flow

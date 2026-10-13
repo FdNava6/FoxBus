@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { operationsService } from "../../services/operationsService";
+import { presentationMode } from "../../utils/presentationMode";
 export default function EnvironmentNotice() {
   const [health, setHealth] = useState(null);
   useEffect(() => {
@@ -9,7 +10,7 @@ export default function EnvironmentNotice() {
       .then(setHealth)
       .catch(() => {});
   }, []);
-  if (!health || !health.readiness) return null;
+  if (presentationMode || !health || !health.readiness) return null;
   if (health.app_mode === "pilot")
     return (
       <aside

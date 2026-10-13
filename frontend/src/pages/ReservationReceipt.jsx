@@ -11,6 +11,7 @@ import ReservationCode from "../components/common/ReservationCode";
 import OperatorContact from "../components/common/OperatorContact";
 import Button from "../components/common/Button";
 import SimulationNotice from "../components/common/SimulationNotice";
+import { presentationMode } from "../utils/presentationMode";
 export default function ReservationReceipt() {
   const { code } = useParams(),
     [reservation, setReservation] = useState(null),
@@ -81,14 +82,15 @@ export default function ReservationReceipt() {
               <SimulationNotice />
             )}
             <ReservationCode code={code} />
-            {["pending", "sending", "failed"].includes(
-              reservation.confirmationEmailStatus,
-            ) && (
-              <p className="rounded-lg bg-blue-50 p-3 text-sm">
-                El correo de confirmación aún está pendiente. Puedes guardar
-                este comprobante sin esperar el correo.
-              </p>
-            )}
+            {!presentationMode &&
+              ["pending", "sending", "failed"].includes(
+                reservation.confirmationEmailStatus,
+              ) && (
+                <p className="rounded-lg bg-blue-50 p-3 text-sm">
+                  El correo de confirmación aún está pendiente. Puedes guardar
+                  este comprobante sin esperar el correo.
+                </p>
+              )}
             <p>
               Comprador: {reservation.contact?.name || "Datos por completar"}
             </p>
@@ -100,7 +102,8 @@ export default function ReservationReceipt() {
             ))}
             <OperatorContact policy={policy} />
             <p className="text-sm">
-              {reservation.simulation || reservation.trip.isDemo ? (
+              {(reservation.simulation || reservation.trip.isDemo) &&
+              !presentationMode ? (
                 "Esta reserva, su pago y sus boletos son simulaciones sin servicio real."
               ) : (
                 <>

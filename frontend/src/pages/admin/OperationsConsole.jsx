@@ -1,3 +1,4 @@
+import { presentationMode } from "../../utils/presentationMode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { operationsService } from "../../services/operationsService";
@@ -270,7 +271,7 @@ function OperationsView({ view, user }) {
                         setForm({ reference: "", verified: false });
                       }}
                     >
-                      {pilotMode
+                      {pilotMode && !presentationMode
                         ? "Simular pago en caja"
                         : "Registrar efectivo recibido"}
                     </Button>
@@ -296,12 +297,16 @@ function OperationsView({ view, user }) {
               }}
             >
               <h2 className="font-bold">
-                {pilotMode ? "Simulación de caja" : "Cobro en caja"} ·{" "}
-                {formatCurrency(selected.price)}
+                {presentationMode
+                  ? "Registro de pago en caja"
+                  : pilotMode
+                    ? "Simulación de caja"
+                    : "Cobro en caja"}{" "}
+                · {formatCurrency(selected.price)}
               </h2>
               <Field
                 label={
-                  pilotMode
+                  pilotMode && !presentationMode
                     ? "Referencia ficticia de caja (única)"
                     : "Comprobante de caja (único)"
                 }
@@ -315,12 +320,14 @@ function OperationsView({ view, user }) {
                   checked={form.verified || false}
                   onChange={(e) => change("verified", e.target.checked)}
                 />
-                {pilotMode
-                  ? "Confirmo que es una simulación y no he recibido dinero real."
-                  : "Confirmo que recibí el efectivo y verifiqué el importe. Los pagos bancarios usan su adaptador."}
+                {presentationMode
+                  ? "Confirmo que revisé el importe y la referencia de esta operación."
+                  : pilotMode
+                    ? "Confirmo que es una simulación y no he recibido dinero real."
+                    : "Confirmo que recibí el efectivo y verifiqué el importe. Los pagos bancarios usan su adaptador."}
               </label>
               <Button disabled={busy}>
-                {pilotMode
+                {pilotMode && !presentationMode
                   ? "Confirmar pago simulado de caja"
                   : "Registrar efectivo"}
               </Button>
@@ -781,7 +788,7 @@ function OperationsView({ view, user }) {
                     setForm({});
                   }}
                 >
-                  {pilotMode
+                  {pilotMode && !presentationMode
                     ? "Simular devolución"
                     : "Registrar devolución efectuada"}
                 </Button>
@@ -804,18 +811,18 @@ function OperationsView({ view, user }) {
               }}
             >
               <h2 className="font-bold">
-                {pilotMode
+                {pilotMode && !presentationMode
                   ? "Devolución ficticia del piloto"
                   : "Comprobante de reintegro"}
               </h2>
               <p className="text-sm">
-                {pilotMode
+                {pilotMode && !presentationMode
                   ? "Esta acción solo cierra un caso de prueba; no devuelve dinero ni ordena transferencias."
                   : "Registra una devolución ya verificada. Esta acción no ordena una transferencia bancaria."}
               </p>
               <Field
                 label={
-                  pilotMode
+                  pilotMode && !presentationMode
                     ? "Referencia ficticia única de la devolución"
                     : "Referencia única del reintegro"
                 }
@@ -835,7 +842,7 @@ function OperationsView({ view, user }) {
                 onChange={(v) => change("response", v)}
               />
               <Button disabled={busy}>
-                {pilotMode
+                {pilotMode && !presentationMode
                   ? "Confirmar devolución simulada"
                   : "Registrar comprobante"}
               </Button>
@@ -1034,11 +1041,21 @@ function OperationsView({ view, user }) {
         <section className="space-y-4 rounded-xl bg-white p-5">
           {pilotMode && (
             <section className="space-y-3 rounded-xl bg-blue-50 p-4">
-              <h2 className="font-bold">Informe agregado del piloto</h2>
+              <h2 className="font-bold">
+                {presentationMode
+                  ? "Resumen de actividad"
+                  : "Informe agregado del piloto"}
+              </h2>
               <p className="text-sm">
-                Actividad simulada, no ventas ni validación de mercado. El
-                informe no incluye datos personales; el registro operativo que
-                sigue es solo para el personal.
+                {presentationMode ? (
+                  "Conteos de reservas, pagos, boletos y solicitudes. El informe no incluye datos personales."
+                ) : (
+                  <>
+                    Actividad simulada, no ventas ni validación de mercado. El
+                    informe no incluye datos personales; el registro operativo
+                    que sigue es solo para el personal.
+                  </>
+                )}
               </p>
               <Button
                 disabled={busy}
@@ -1056,14 +1073,21 @@ function OperationsView({ view, user }) {
                   }
                 }}
               >
-                Consultar informe del piloto
+                {presentationMode
+                  ? "Consultar actividad"
+                  : "Consultar informe del piloto"}
               </Button>
               {pilotMetrics && (
                 <div role="status" className="space-y-2 text-sm">
                   <p>
-                    Pagos simulados: {pilotMetrics.simulatedPayments} · Boletos
-                    de prueba: {pilotMetrics.tickets.issued} · Abordajes de
-                    prueba: {pilotMetrics.tickets.checkedIn}
+                    {presentationMode
+                      ? "Pagos registrados:"
+                      : "Pagos simulados:"}{" "}
+                    {pilotMetrics.simulatedPayments} ·{" "}
+                    {presentationMode ? "Boletos:" : "Boletos de prueba:"}{" "}
+                    {pilotMetrics.tickets.issued} ·{" "}
+                    {presentationMode ? "Abordajes:" : "Abordajes de prueba:"}{" "}
+                    {pilotMetrics.tickets.checkedIn}
                   </p>
                   {pilotMetrics.reservationsByStatus.map((row) => (
                     <p key={row.status}>

@@ -112,6 +112,7 @@ En `backend`, ejecutar `npm ci`, `npm test` y `npm run load:check`. El E2E usa u
 - [Guion sugerido para la exposición](docs/GUIA_PRESENTACION.md)
 - [Checklist de la laptop de exposición](docs/CHECKLIST_EXPOSICION.md)
 - [Correcciones y mejoras del ensayo](docs/MEJORAS_EXPOSICION.md)
+- [Modo de exposición local sin avisos visuales](docs/MODO_EXPOSICION.md)
 - [Flujo de contribución](CONTRIBUTING.md)
 
 ### Entregables

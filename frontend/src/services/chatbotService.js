@@ -1,8 +1,14 @@
 import api from "./api";
+import { presentationMode } from "../utils/presentationMode";
 export const chatbotService = {
   sendMessage: async (message) => {
     try {
-      return (await api.post("/chatbot/message", { message })).data;
+      return (
+        await api.post("/chatbot/message", {
+          message,
+          presentation: presentationMode,
+        })
+      ).data;
     } catch {
       return {
         message:

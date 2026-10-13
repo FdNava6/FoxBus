@@ -313,6 +313,34 @@ test("FoxBot piloto guía simulación y buzón local sin prometer correo ni cobr
     /nunca se transfiere dinero/,
   );
 });
+test("orientación de exposición cambia textos sin cambiar modo, política ni permitir servicios reales", (t) => {
+  const store = new OperationsStore(":memory:");
+  bindDatabaseMode(store, "pilot");
+  t.after(() => store.close());
+  const before = JSON.stringify(store.policy());
+  for (const message of [
+    "¿Cómo pago?",
+    "Recuperar contraseña",
+    "Quiero devolución",
+    "Comprar pasaje",
+  ]) {
+    const response = store.chatbot(message, { presentation: true });
+    assert.doesNotMatch(
+      response.message,
+      /piloto|simulad|sin cobro|de prueba/i,
+    );
+  }
+  assert.match(
+    store.chatbot("¿Cómo pago?", { presentation: true }).message,
+    /Confirmar pago/,
+  );
+  assert.match(
+    store.chatbot("¿Cómo pago?", { presentation: "true" }).message,
+    /Simular pago/,
+  );
+  assert.equal(store.pilotMode, true);
+  assert.equal(JSON.stringify(store.policy()), before);
+});
 test("API comprueba permisos para gestión de personal e inventario y conserva contrato legado del listado", async (t) => {
   const { store, auth, admin, person } = setup(t),
     agent = person("agent@example.test", "agent"),

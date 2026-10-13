@@ -16,6 +16,8 @@ Pendiente fuera del código: ensayar en la laptop de exposición, realizar entre
 
 ## Verificación
 
+Actualización del modo de exposición: [presentación local sin avisos visuales](MODO_EXPOSICION.md). El contexto se explica oralmente; los bloqueos reales del backend no cambian. La suite actual contiene 68 pruebas backend, 16 frontend y tres recorridos de navegador (normal, piloto con avisos y exposición).
+
 La revisión incluye 67 pruebas del backend y 15 del frontend, lint/build y recorridos de navegador normal/piloto. El recorrido comprueba dos reservas consecutivas de ventanilla, filtros, gestión de una cuenta ficticia del personal y una reserva invitada vinculada tras registrarse, además de los controles de tiempo anteriores. Las pruebas de carga usan una base aislada: no acreditan ventas ni rendimiento en otro hosting.
 
 Para grabar el tramo de pasajero como respaldo, configurar FOXBUS_RECORD_DEMO=true solo al ejecutar el E2E piloto. El vídeo queda en frontend/test-results/pilot-flow/demo, fuera de Git, y debe identificarse como datos de prueba. La grabación no verifica la laptop de otra persona ni sustituye su ensayo.

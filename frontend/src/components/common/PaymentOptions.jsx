@@ -3,6 +3,7 @@ import { operationsService } from "../../services/operationsService";
 import { bookingErrorMessage } from "../../services/reservationService";
 import OperatorContact from "./OperatorContact";
 import Button from "./Button";
+import { presentationMode } from "../../utils/presentationMode";
 export default function PaymentOptions({ reservation }) {
   const [options, setOptions] = useState(null),
     [error, setError] = useState(""),
@@ -48,11 +49,17 @@ export default function PaymentOptions({ reservation }) {
       ) : (
         <>
           {options.simulation ? (
-            <p className="rounded-lg bg-blue-50 p-3 text-blue-950">
-              Solo pagos de prueba. Usa “Simular pago” para completar el
-              recorrido; no ingreses tarjetas, no transfieras dinero ni
-              entregues efectivo. Los boletos resultantes no permiten viajar.
-            </p>
+            presentationMode ? (
+              <p>
+                Confirma el pago desde tu reserva antes de que venza el plazo.
+              </p>
+            ) : (
+              <p className="rounded-lg bg-blue-50 p-3 text-blue-950">
+                Solo pagos de prueba. Usa “Simular pago” para completar el
+                recorrido; no ingreses tarjetas, no transfieras dinero ni
+                entregues efectivo. Los boletos resultantes no permiten viajar.
+              </p>
+            )
           ) : options.onlineAvailable ? (
             <>
               <Button disabled={busy} onClick={pay}>
@@ -91,7 +98,7 @@ export default function PaymentOptions({ reservation }) {
               repetirlo.
             </p>
           )}
-          {options.demo && (
+          {options.demo && !presentationMode && (
             <p className="text-sm text-blue-800">
               Modo de prueba: “Simular pago” no cobra dinero.
             </p>

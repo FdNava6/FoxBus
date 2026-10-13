@@ -1,3 +1,7 @@
+import {
+  paymentActionLabel,
+  presentationMode,
+} from "../utils/presentationMode";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../components/common/Button";
@@ -172,14 +176,15 @@ export default function Checkout() {
             </p>
           )}
           <ReservationCode code={code} />
-          {["pending", "sending", "failed"].includes(
-            session.confirmationEmailStatus,
-          ) && (
-            <p className="rounded-lg bg-blue-50 p-3 text-sm">
-              El correo de confirmación aún no se ha enviado. Guarda el
-              comprobante aquí y consulta el estado en Mis viajes.
-            </p>
-          )}
+          {!presentationMode &&
+            ["pending", "sending", "failed"].includes(
+              session.confirmationEmailStatus,
+            ) && (
+              <p className="rounded-lg bg-blue-50 p-3 text-sm">
+                El correo de confirmación aún no se ha enviado. Guarda el
+                comprobante aquí y consulta el estado en Mis viajes.
+              </p>
+            )}
           <p className="font-bold">Total: {formatCurrency(session.price)}</p>
           {session.status === "pending_payment" && (
             <>
@@ -191,7 +196,7 @@ export default function Checkout() {
                     disabled={processing}
                     onClick={() => action(reservationService.payDemo)}
                   >
-                    Simular pago (sin cobro)
+                    {paymentActionLabel}
                   </Button>
                 )}
                 <Button

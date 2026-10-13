@@ -1,3 +1,4 @@
+import { paymentActionLabel } from "../utils/presentationMode";
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCartStore } from "../store/useCartStore";
@@ -266,7 +267,7 @@ export default function MyTrips() {
                                 act(reservationService.payDemo, r.code)
                               }
                             >
-                              Simular pago (sin cobro)
+                              {paymentActionLabel}
                             </Button>
                           )}
                           <Button
