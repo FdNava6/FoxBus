@@ -1,13 +1,7 @@
 import { operationLabel } from "../../utils/operationsPresentation";
 import Button from "../common/Button";
 const statuses = {
-  reservations: [
-    "active_session",
-    "pending_payment",
-    "paid",
-    "cancelled",
-    "expired",
-  ],
+  reservations: ["paid", "cancelled"],
   requests: ["open", "in_review", "resolved", "rejected"],
   financial: ["open", "refund_pending", "resolved"],
 };
@@ -46,19 +40,19 @@ export default function StaffFilters({
         </label>
         <label className="text-sm">
           Estado del filtro
-          <select
-            className="input mt-1"
-            aria-label="Estado del filtro"
-            value={draft.status}
-            onChange={(event) => change("status", event.target.value)}
-          >
-            <option value="">Todos los estados</option>
-            {statuses[view].map((status) => (
-              <option key={status} value={status}>
-                {operationLabel(status)}
-              </option>
-            ))}
-          </select>
+            <select
+              className="input mt-1"
+              aria-label="Estado del filtro"
+              value={draft.status}
+              onChange={(event) => change("status", event.target.value)}
+            >
+              {view !== "reservations" && <option value="">Todos los estados</option>}
+              {(statuses[view] || []).map((status) => (
+                <option key={status} value={status}>
+                  {operationLabel(status)}
+                </option>
+              ))}
+            </select>
         </label>
         {view === "reservations" && (
           <label className="text-sm">
@@ -72,6 +66,24 @@ export default function StaffFilters({
               <option value="">Todos los canales</option>
               <option value="web">Web</option>
               <option value="counter">Ventanilla</option>
+            </select>
+          </label>
+        )}
+        {view === "requests" && (
+          <label className="text-sm">
+            Tipo de solicitud
+            <select
+              className="input mt-1"
+              aria-label="Tipo de solicitud"
+              value={draft.kind || ""}
+              onChange={(event) => change("kind", event.target.value)}
+            >
+              <option value="">Todos los tipos</option>
+              <option value="complaint">Reclamos</option>
+              <option value="reprogram">Reprogramaciones</option>
+              <option value="refund">Devoluciones</option>
+              <option value="delay">Retrasos</option>
+              <option value="privacy">Privacidad</option>
             </select>
           </label>
         )}

@@ -10,7 +10,7 @@ export default function AdminLayout() {
   return (
     <div className="flex min-h-screen bg-gray-50">
       <div className="hidden w-64 shrink-0 md:block">
-        <div className="sticky top-0 h-screen overflow-y-auto">
+        <div className="sticky top-0 h-screen">
           <Sidebar />
         </div>
       </div>
@@ -21,7 +21,7 @@ export default function AdminLayout() {
             aria-label="Cerrar navegación"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-0 h-full overflow-y-auto">
+          <div className="absolute left-0 top-0 h-screen">
             <Sidebar onClose={() => setOpen(false)} />
           </div>
         </div>

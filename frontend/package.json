@@ -8,9 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
-    "test:e2e": "node e2e/reservation-flow.mjs",
-    "test:pilot": "node e2e/pilot-flow.mjs",
-    "test:presentation": "node e2e/presentation-flow.mjs",
+    "test:e2e": "node --env-file-if-exists=../backend/.env e2e/reservation-flow.mjs",
+    "test:pilot": "node --env-file-if-exists=../backend/.env.pilot e2e/pilot-flow.mjs",
+    "test:presentation": "node --env-file-if-exists=../backend/.env.pilot e2e/presentation-flow.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

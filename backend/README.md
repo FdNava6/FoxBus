@@ -1,6 +1,6 @@
 # FOXbus: reservas, operación y pagos
 
-Backend Node.js 24 LTS + SQLite, con migraciones versionadas y datos persistentes.
+Backend Node.js 24 LTS + MySQL 8, con migraciones versionadas y datos persistentes.
 
 ## Desarrollo local
 
@@ -8,18 +8,29 @@ Para el piloto sin cobros: `npm run pilot`, con base independiente y sin cargar 
 
 Desde backend: copiar .env.example a .env y ejecutar npm ci y npm start. En PowerShell: Copy-Item .env.example .env. Desde frontend: npm ci y npm run dev.
 
+Requiere MySQL 8 accesible por TCP. Crear una base por entorno y un usuario dedicado con permisos sobre ella; completar `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD` y `MYSQL_DATABASE` en `.env`. La aplicación crea la base si el usuario tiene permiso `CREATE` y aplica `migrations/mysql/001_schema.sql` una sola vez. Los tests usan bases efímeras `foxbus_test_<pid>_<n>` o `foxbus_test_<hash>` que se eliminan al cerrar, por lo que el usuario necesita permisos sobre ese prefijo. Para una instancia local: `docker compose up -d mysql` (ver `compose.yml`).
+
+Instalación manual (opcional; no hace falta pegar el esquema si se usa la aplicación):
+
+```powershell
+mysql -u root -p < migrations/mysql/000_database.sql
+mysql -u root -p foxbus < migrations/mysql/001_schema.sql
+```
+
+`000_database.sql` solo crea `foxbus`; `001_schema.sql` es agnóstico de la base para que el piloto y los tests no escriban en ventas.
+
 El ejemplo habilita salidas de muestra para siete días, pago sin cobro y buzón local. Estas opciones se desactivan con NODE_ENV=production. Consultar /api/health para conocer configuración y estado de jobs. Una salida se publica explícitamente: buscar una fecha no crea viajes.
 
 ## Reglas de tiempo y pasajeros
 
-- Selección/datos: 10 minutos, sin renovación por consulta, recarga o reintento.
-- Reserva confirmada: 2 horas completas para registrar el pago.
-- Las nuevas reservas se cierran 10 minutos + 2 horas + el margen de presentación antes de salir. El margen por defecto es 30 minutos y se configura por salida. No hay reservas diferidas que venzan después del abordaje.
+- Selección/datos: 2 minutos, sin renovación por consulta, recarga o reintento.
+- Reserva confirmada: 3 minutos completos para registrar el pago.
+- Las nuevas reservas se cierran 2 minutos + 3 minutos + el margen de presentación antes de salir. El margen por defecto es 30 minutos y se configura por salida. No hay reservas diferidas que venzan después del abordaje.
 - Asiento único por servicio y fecha, compartido entre web y caja. Cada salida tiene vehículo, mapa, terminales, fechas UTC y estado.
 - Entre 1 y 6 viajeros por reserva, tres reservas activas por identidad. Cada asiento exige un viajero, documento y nacimiento; se admiten DNI, CE y pasaporte. Un menor requiere adulto responsable declarado; la verificación legal/documental corresponde al operador.
 - El servidor calcula importes y no confía en estados o plazos del cliente.
 
-El job limpia vencimientos cada segundo y al arrancar. Las operaciones aplican además limpieza transaccional. Si el proceso se detiene, los vencimientos se recuperan al reiniciarlo. La API y el job usan SQLite WAL y BEGIN IMMEDIATE con savepoint por operación; una operación rechazada revierte sus modificaciones.
+El job limpia vencimientos cada segundo y al arrancar. Las operaciones aplican además limpieza transaccional. Si el proceso se detiene, los vencimientos se recuperan al reiniciarlo. La API y el job usan MySQL 8 (InnoDB) con `START TRANSACTION` y savepoint por operación; una operación rechazada revierte sus modificaciones.
 
 ## Cuentas y permisos
 
@@ -57,7 +68,7 @@ La experiencia de pago del pasajero admite checkout alojado e instrucciones publ
 
 La recuperación acepta correo con código opcional y concede las reservas coincidentes únicamente después de verificar el enlace. Mis viajes incluye sesiones activas para retomarlas. Las solicitudes conservan el plazo de primera respuesta publicado al registrarse; Finanzas puede comunicar una estimación sin simular un reintegro.
 
-Las notificaciones se guardan en outbox antes del envío, con reintentos, bloqueo de trabajo e Idempotency-Key. Configurar MAIL_WEBHOOK_URL (HTTPS) y MAIL_API_KEY para un adaptador de correo. Este debe aceptar id, to, subject y text, respetar idempotencia y confirmar aceptación. Sin configuración, los correos permanecen pendientes y no se presentan como enviados.
+Las notificaciones se guardan en outbox antes del envío, con reintentos, bloqueo de trabajo e Idempotency-Key. Configurar MAIL_WEBHOOK_URL (HTTPS) y MAIL_API_KEY para un adaptador de correo. El webhook recibe JSON `{ id, to, subject, text, html? }` (Bearer + `Idempotency-Key`): `text` siempre; `html` se incluye en comprobantes de pago/boletos con QR embebido (si tu proveedor/endpoint no usa `html`, ignóralo y envía `text`). Respetar idempotencia y confirmar aceptación. Sin configuración, los correos permanecen pendientes y no se presentan como enviados. En `APP_MODE=pilot` no se envía a proveedores externos.
 
 DEV_MAILBOX=true permite leer únicamente las notificaciones de la sesión actual en desarrollo. Nunca activar en producción.
 

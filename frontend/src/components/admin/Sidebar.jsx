@@ -16,10 +16,8 @@ const groups = [
       ["reservations", "Reservas", ["admin", "agent", "finance"]],
       ["passengers", "Pasajeros", ["admin", "agent", "finance"]],
       ["offers", "Ofertas", ["admin", "agent"]],
-      ["departures", "Viajes", ["admin", "agent", "finance", "boarding"]],
       ["requests", "Solicitudes", ["admin", "agent", "finance"]],
-      ["financial", "Conciliación", ["admin", "finance"]],
-      ["boarding", "Abordaje QR", ["admin", "boarding"]],
+      ["boarding", "Abordaje", ["admin", "boarding"]],
     ],
   },
   {
@@ -36,12 +34,12 @@ export default function Sidebar({ onClose }) {
     [p] = useSearchParams(),
     view = p.get("view") || "metrics";
   return (
-    <aside className="h-full w-64 bg-fox-dark p-5 text-white">
-      <p className="mb-5 text-xl font-bold">FOXBus · Operación</p>
-      <p className="mb-6 text-sm">
+    <aside className="flex h-full w-64 flex-col bg-fox-dark p-5 text-white">
+      <p className="mb-1 text-xl font-bold">FOXBus · Operación</p>
+      <p className="mb-5 text-sm text-white/80">
         {user?.name} · {operationLabel(user?.role)}
       </p>
-      <nav className="space-y-5">
+      <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
         {groups.map((group) => {
           const entries = group.entries.filter((e) =>
             e[2].includes(user?.role),
@@ -74,10 +72,10 @@ export default function Sidebar({ onClose }) {
         })}
       </nav>
       <Link
-        className="mt-8 flex items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-fox-pink"
+        className="mt-4 flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-fox-pink"
         to="/"
       >
-        <LogOut className="w-5 h-5" />
+        <LogOut className="h-5 w-5" />
         Salir del panel
       </Link>
     </aside>

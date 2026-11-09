@@ -1,30 +1,24 @@
-import { presentationMode } from "../../utils/presentationMode";
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { operationsService } from "../../services/operationsService";
 import { useAuthStore } from "../../store/useAuthStore";
 import { bookingErrorMessage } from "../../services/reservationService";
 import { formatDeadline } from "../../utils/bookingTime";
 import { formatCurrency } from "../../utils/helpers";
+import { operationLabel, emptyStaffFilters } from "../../utils/operationsPresentation";
 import Button from "../../components/common/Button";
-import BoardingScanner from "../../components/common/BoardingScanner";
 import Dashboard from "./Dashboard";
-import Passengers from "./Passengers";
 import Offers from "./Offers";
 import FoxBotConfig from "./FoxBotConfig";
-import CounterBooking from "../../components/admin/CounterBooking";
 import StaffFilters from "../../components/admin/StaffFilters";
 import StaffAccess from "../../components/admin/StaffAccess";
-import {
-  operationLabel,
-  emptyStaffFilters,
-} from "../../utils/operationsPresentation";
+import busImage from "../../assets/BUS.webp";
+
 const access = {
   metrics: ["admin", "finance", "agent"],
   reservations: ["admin", "agent", "finance"],
   passengers: ["admin", "agent", "finance"],
   offers: ["admin", "agent"],
-  departures: ["admin", "agent", "finance", "boarding"],
   requests: ["admin", "agent", "finance"],
   financial: ["admin", "finance"],
   boarding: ["admin", "boarding"],
@@ -34,1023 +28,346 @@ const access = {
 };
 const titles = {
   metrics: "Resumen de la operación",
-  reservations: "Reservas e inventario compartido",
-  departures: "Salidas y vehículos",
-  requests: "Solicitudes y reclamos",
+  reservations: "Reservas",
+  passengers: "Pasajeros (cuentas registradas)",
+  requests: "Solicitudes (reclamos, reprogramaciones y devoluciones)",
   financial: "Conciliación y devoluciones",
-  boarding: "Validación de abordaje",
+  boarding: "Abordaje por DNI",
   settings: "Datos y políticas del operador",
   users: "Personal autorizado",
 };
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  required = true,
-  options,
-  min,
-  max,
-}) {
+const requestKinds = [
+  ["", "Todo"],
+  ["complaint", "Reclamos"],
+  ["reprogram", "Reprogramaciones"],
+  ["refund", "Devoluciones"],
+  ["delay", "Retrasos"],
+  ["privacy", "Privacidad"],
+];
+const requestStatuses = ["in_review", "resolved", "rejected"];
+
+function Field({ label, value, onChange, type = "text", required = true, options, min, max }) {
   return (
     <label className="block text-sm">
       <span className="mb-1 block">{label}</span>
       {options ? (
-        <select
-          className="input"
-          required={required}
-          value={value || ""}
-          onChange={(e) => onChange(e.target.value)}
-        >
+        <select className="input" required={required} value={value || ""} onChange={(e) => onChange(e.target.value)}>
           <option value="">Seleccionar</option>
           {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
       ) : (
-        <input
-          className="input"
-          type={type}
-          step={type === "number" ? "any" : undefined}
-          min={min}
-          max={max}
-          required={required}
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <input className="input" type={type} step={type === "number" ? "any" : undefined} min={min} max={max} required={required} value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
       )}
     </label>
   );
 }
+
 export default function OperationsConsole() {
-  const user = useAuthStore((s) => s.user),
-    [params] = useSearchParams();
+  const user = useAuthStore((s) => s.user);
+  const [params] = useSearchParams();
   const requested = params.get("view") || "metrics";
   const view = access[requested]?.includes(user?.role)
     ? requested
-    : Object.keys(access).find((k) => access[k].includes(user?.role)) ||
-      "departures";
-  // Aislar cada sección evita mezclar filtros, filas y formularios de otro
-  // listado durante la navegación (p. ej. «pagado» no existe en solicitudes).
+    : Object.keys(access).find((k) => access[k].includes(user?.role)) || "metrics";
   return <OperationsView key={view} view={view} user={user} />;
 }
+
 function OperationsView({ view, user }) {
-  const [data, setData] = useState([]),
-    [departures, setDepartures] = useState([]),
-    [vehicles, setVehicles] = useState([]),
-    [routes, setRoutes] = useState([]),
-    [reservations, setReservations] = useState([]),
-    [policy, setPolicy] = useState(null);
+  const [data, setData] = useState([]);
+  const [departures, setDepartures] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [inventory, setInventory] = useState({});
+  const [accounts, setAccounts] = useState([]);
+  const [policy, setPolicy] = useState(null);
   const paginated = ["reservations", "requests", "financial"].includes(view);
-  const [filterDraft, setFilterDraft] = useState(emptyStaffFilters);
-  const [filters, setFilters] = useState(emptyStaffFilters);
+  const [filterDraft, setFilterDraft] = useState(() => emptyStaffFilters(view));
+  const [filters, setFilters] = useState(() => emptyStaffFilters(view));
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 25,
-    total: 0,
-    totalPages: 1,
-  });
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [listLoading, setListLoading] = useState(false);
-  const requestVersion = useRef(0);
-  const [pilotMode, setPilotMode] = useState(false);
-  useEffect(() => {
-    operationsService
-      .health()
-      .then((health) => setPilotMode(health.app_mode === "pilot"))
-      .catch(() => {});
-  }, []);
-  const [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [busy, setBusy] = useState(false),
-    [selected, setSelected] = useState(null),
-    [form, setForm] = useState({}),
-    [mapping, setMapping] = useState({});
-  const [token, setToken] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({});
+  const [boardingDni, setBoardingDni] = useState("");
+  const [boardingResults, setBoardingResults] = useState([]);
+  const [selectedDestination, setSelectedDestination] = useState("");
+  const [selectedDeparture, setSelectedDeparture] = useState("");
+
   const load = useCallback(async () => {
-    const version = ++requestVersion.current;
     setListLoading(true);
     try {
-      const path = {
-        reservations: "reservations",
-        departures: "departures",
-        requests: "requests",
-        financial: "financial",
-        users: "users",
-      }[view];
+      const path = { reservations: "reservations", requests: "requests", financial: "financial", users: "users" }[view];
       if (path) {
-        const result = await operationsService.staffGet(
-          path,
-          paginated ? { ...filters, page, pageSize: 25 } : undefined,
-        );
-        if (version !== requestVersion.current) return;
-        if (paginated) {
-          setData(result.items);
-          setPagination(result);
-        } else setData(result);
+        const result = await operationsService.staffGet(path, paginated ? { ...filters, page, pageSize: 25 } : undefined);
+        if (paginated) { setData(result.items || []); setPagination(result); }
+        else setData(result || []);
       }
+      if (view === "passengers") setAccounts(await operationsService.passengerAccounts());
       setPolicy(await operationsService.policy());
-      if (["departures", "reservations", "requests"].includes(view))
-        setDepartures(await operationsService.staffGet("departures"));
-      if (
-        view === "departures" &&
-        ["admin", "agent", "finance"].includes(user.role)
-      )
+      if (view === "reservations") {
+        setDepartures(await operationsService.staffGet("departures", { passengerVisible: "true" }));
         setVehicles(await operationsService.staffGet("vehicles"));
-      if (
-        view === "departures" &&
-        ["admin", "agent", "finance"].includes(user.role)
-      )
-        setRoutes(await operationsService.staffGet("routes"));
-      if (view === "departures" && user.role === "admin")
-        setReservations(
-          await operationsService.departureInventory(selected?.id),
-        );
+      }
+      if (view === "requests") setDepartures(await operationsService.staffGet("departures"));
     } catch (e) {
-      if (version === requestVersion.current) setError(bookingErrorMessage(e));
+      setError(bookingErrorMessage(e));
     } finally {
-      if (version === requestVersion.current) setListLoading(false);
+      setListLoading(false);
     }
-  }, [view, user, paginated, filters, page, selected]);
+  }, [view, paginated, filters, page]);
+
   useEffect(() => {
-    const first = setTimeout(load, 0),
-      timer = setInterval(load, 15000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(timer);
-    };
+    const first = setTimeout(load, 0);
+    const timer = setInterval(load, 15000);
+    return () => { clearTimeout(first); clearInterval(timer); };
   }, [load]);
+
   const run = async (fn) => {
-    setBusy(true);
-    setError("");
-    setNotice("");
+    setBusy(true); setError(""); setNotice("");
     try {
       const result = await fn();
-      setNotice(result.message || "Operación registrada.");
+      setNotice(result?.message || "Operación registrada.");
       await load();
       return result;
     } catch (e) {
       setError(bookingErrorMessage(e));
-    } finally {
-      setBusy(false);
+    } finally { setBusy(false); }
+  };
+  const change = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const reservationTree = useMemo(() => {
+    const map = new Map();
+    for (const r of data) {
+      let contact = {};
+      try { contact = JSON.parse(r.passenger_json || "null") || {}; } catch { contact = {}; }
+      let seats = [];
+      try { seats = JSON.parse(r.selected_seats || "[]"); } catch { seats = []; }
+      const dest = `${r.origin || "Origen"} → ${r.destination || "Destino"}`;
+      const flight = `${dest} · ${r.travel_date || ""} · ${r.departure_id || "salida"}`;
+      if (!map.has(dest)) map.set(dest, new Map());
+      const flights = map.get(dest);
+      if (!flights.has(flight)) flights.set(flight, { label: `${r.travel_date || ""} · salida ${r.departure_id || "-"}`, depId: r.departure_id, date: r.travel_date, items: [] });
+      flights.get(flight).items.push({ ...r, contact, seats });
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([dest, flights]) => ({
+      dest,
+      flights: [...flights.values()].sort((a, b) => String(b.date).localeCompare(String(a.date))),
+    }));
+  }, [data]);
+
+  const vehicleMap = useMemo(() => Object.fromEntries(vehicles.map((v) => [v.id, v])), [vehicles]);
+
+  const openDepartureInventory = async (depId) => {
+    if (!depId) return;
+    const next = selectedDeparture === depId ? "" : depId;
+    setSelectedDeparture(next);
+    if (!next || inventory[next]) return;
+    try {
+      const items = await operationsService.departureInventory(next);
+      setInventory((m) => ({ ...m, [next]: items }));
+    } catch (e) {
+      setError(bookingErrorMessage(e));
     }
   };
-  const change = (key, value) => setForm({ ...form, [key]: value });
-  const future = departures.filter((d) => d.status === "scheduled");
-  const depOptions = future.map((d) => ({
-    value: d.id,
-    label:
-      d.origin + " → " + d.destination + " · " + formatDeadline(d.departure_at),
-  }));
-  const held = reservations
-    .filter(
-      (r) =>
-        r.trip.departureId === selected?.id &&
-        ["paid", "pending_payment", "active_session"].includes(r.status),
-    )
-    .flatMap((r) => r.seats);
-  const newVehicle = vehicles.find((v) => v.id === form.vehicleId);
+
   return (
     <section className="space-y-6">
-      {view === "metrics" ? (
-        <Dashboard />
-      ) : view === "passengers" ? (
-        <Passengers />
-      ) : view === "offers" ? (
-        <Offers />
-      ) : view === "foxbot" ? (
-        <FoxBotConfig />
-      ) : (
+      {view === "metrics" ? <Dashboard /> : view === "offers" ? <Offers /> : view === "foxbot" ? <FoxBotConfig /> : (
         <>
           <h1 className="text-2xl font-bold">{titles[view]}</h1>
-          <p className="text-sm text-gray-600">
-            Cada operación se verifica en el servidor y queda auditada. Rol
-            actual: {operationLabel(user?.role)}.
-          </p>
+          <p className="text-sm text-gray-600">Datos reales registrados por el servidor. Rol: {operationLabel(user?.role)}.</p>
         </>
       )}
-      {error && (
-        <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
-          {error}
-        </p>
-      )}
-      {notice && (
-        <p role="status" className="rounded-xl bg-green-50 p-4">
-          {notice}
-        </p>
-      )}
+      {error && <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
+      {notice && <p role="status" className="rounded-xl bg-green-50 p-4">{notice}</p>}
+
       {paginated && (
-        <StaffFilters
-          view={view}
-          draft={filterDraft}
-          setDraft={setFilterDraft}
-          pagination={pagination}
-          loading={listLoading}
-          onPage={setPage}
-          onApply={() => {
-            setFilters({ ...filterDraft });
-            setPage(1);
-            setError("");
-          }}
-          onReset={() => {
-            setFilterDraft(emptyStaffFilters());
-            setFilters(emptyStaffFilters());
-            setPage(1);
-            setError("");
-          }}
-        />
+        <StaffFilters view={view} draft={filterDraft} setDraft={setFilterDraft} pagination={pagination} loading={listLoading} onPage={setPage}
+          onApply={() => { setFilters({ ...filterDraft }); setPage(1); setError(""); }}
+          onReset={() => { setFilterDraft(emptyStaffFilters(view)); setFilters(emptyStaffFilters(view)); setPage(1); setError(""); }} />
       )}
+
       {view === "reservations" && (
-        <>
-          <div className="space-y-4">
-            {data.map((r) => (
-              <article key={r.code} className="rounded-xl bg-white p-4">
-                <p className="font-bold">
-                  {r.route} · {operationLabel(r.status)} ·{" "}
-                  {operationLabel(r.channel)}
-                </p>
-                <p>
-                  {r.date} · {r.seats.join(", ")} · {formatCurrency(r.price)}
-                </p>
-                <p>
-                  {r.contact?.name} · {r.contact?.email}
-                </p>
-                <p className="break-all font-mono text-xs">{r.code}</p>
-                {r.status === "pending_payment" &&
-                  ["admin", "finance"].includes(user.role) && (
-                    <Button
-                      className="mt-3"
-                      variant="secondary"
-                      onClick={() => {
-                        setSelected(r);
-                        setForm({ reference: "", verified: false });
-                      }}
-                    >
-                      {pilotMode && !presentationMode
-                        ? "Simular pago en caja"
-                        : "Registrar efectivo recibido"}
-                    </Button>
-                  )}
-              </article>
+        <div className="space-y-4">
+          {reservationTree.map(({ dest, flights }) => (
+            <section key={dest} className="rounded-2xl border bg-white p-4">
+              <button type="button" className="flex w-full items-center justify-between text-left font-bold" onClick={() => setSelectedDestination(selectedDestination === dest ? "" : dest)}>
+                <span>{dest}</span>
+                <span className="text-sm font-normal text-gray-500">{flights.length} vuelos · {flights.reduce((n, f) => n + f.items.length, 0)} reservas</span>
+              </button>
+              {selectedDestination === dest && (
+                <div className="mt-3 space-y-3">
+                  {flights.map((f) => (
+                    <div key={f.label} className="rounded-xl border p-3">
+                      <button type="button" className="w-full text-left text-sm font-semibold" onClick={() => openDepartureInventory(f.depId)}>{f.label}</button>
+                      {selectedDeparture === f.depId && (
+                        <div className="mt-2 space-y-2 text-sm">
+                          {(() => {
+                            const dep = departures.find((d) => d.id === f.depId);
+                            const v = dep ? vehicleMap[dep.vehicle_id] : null;
+                            const inv = inventory[f.depId] || [];
+                            const total = v?.seats?.filter((s) => !s.blocked).length || 40;
+                            const occupied = inv.filter((r) => ["paid", "pending_payment", "active_session"].includes(r.status)).reduce((n, r) => n + (r.seats?.length || 0), 0);
+                            return dep ? (
+                              <div className="flex items-center gap-3 rounded-lg bg-gray-50 p-2">
+                                <img src={busImage} alt="Bus" className="h-12 w-20 rounded object-cover" />
+                                <div>
+                                  <p>Bus: {v?.label || dep.vehicle_id}</p>
+                                  <p className="font-medium text-fox-pink">Disponibilidad: {Math.max(0, total - occupied)} / {total}</p>
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
+                          {f.items.map((r) => (
+                            <div key={r.code} className="rounded-lg border p-2">
+                              <p className="font-semibold">{r.contact?.name || "Pasajero"} · {operationLabel(r.status)}</p>
+                              <p>Reserva {r.code} · Asientos: {(r.seats || []).join(", ") || "-"} · {formatCurrency((r.total_cents || 0) / 100)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+          {!reservationTree.length && !listLoading && <p className="text-sm text-gray-600">No hay reservas {filters.status ? `en estado ${operationLabel(filters.status)}` : ""}.</p>}
+        </div>
+      )}
+
+      {view === "passengers" && (
+        <div className="space-y-3">
+          {accounts.map((a) => (
+            <article key={a.id} className="rounded-xl border bg-white p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-bold">{a.name}</p>
+                  <p className="text-gray-600">{a.email}</p>
+                </div>
+                <span className={`rounded-full px-2 py-1 text-xs ${a.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{a.active ? "Activa" : "Inactiva"}</span>
+              </div>
+              <p className="mt-2">Reservas pagadas: {a.paidReservations || 0} · Boletos comprados: {a.ticketsPurchased || 0} · Total: {formatCurrency((a.totalCents || 0) / 100)}</p>
+              <p className="text-gray-500">Registro: {a.created_at ? formatDeadline(a.created_at) : "-"}{a.lastReservationAt ? ` · Última reserva: ${formatDeadline(a.lastReservationAt)}` : ""}</p>
+            </article>
+          ))}
+          {!accounts.length && !listLoading && <p className="text-sm text-gray-600">No hay cuentas de pasajeros registradas.</p>}
+        </div>
+      )}
+
+      {view === "requests" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {requestKinds.map(([kind, label]) => (
+              <button key={label} type="button" onClick={() => { setFilterDraft((f) => ({ ...f, kind })); setFilters((f) => ({ ...f, kind })); setPage(1); }}
+                className={`rounded-full border px-3 py-1.5 text-sm ${(filters.kind || "") === kind ? "border-fox-pink bg-fox-pink text-white" : "bg-white"}`}>
+                {label}
+              </button>
             ))}
           </div>
+          {data.map((s) => (
+            <article key={s.id} className="space-y-2 rounded-xl bg-white p-4">
+              <p className="font-bold">{operationLabel(s.kind)} · {operationLabel(s.status)}</p>
+              <p className="text-sm">{s.origin} → {s.destination} · {s.travel_date} · {s.reservation_code}</p>
+              <p>{s.message}</p>
+              {s.response && <p className="rounded bg-gray-50 p-2 text-sm">{s.response}</p>}
+              {!["resolved", "rejected"].includes(s.status) && (
+                <Button variant="secondary" onClick={() => { setSelected(s); setForm({ status: "in_review", response: "" }); }}>Atender</Button>
+              )}
+            </article>
+          ))}
+          {!data.length && !listLoading && <p className="text-sm text-gray-600">No hay solicitudes para este filtro.</p>}
           {selected && (
-            <form
-              className="space-y-4 rounded-xl bg-white p-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                run(() =>
-                  operationsService.staffPost("payments", {
-                    code: selected.code,
-                    reference: form.reference,
-                    amountCents: Math.round(selected.price * 100),
-                    method: "cash",
-                    verified: form.verified,
-                    simulate: pilotMode,
-                  }),
-                );
-              }}
-            >
-              <h2 className="font-bold">
-                {presentationMode
-                  ? "Registro de pago en caja"
-                  : pilotMode
-                    ? "Simulación de caja"
-                    : "Cobro en caja"}{" "}
-                · {formatCurrency(selected.price)}
-              </h2>
-              <Field
-                label={
-                  pilotMode && !presentationMode
-                    ? "Referencia ficticia de caja (única)"
-                    : "Comprobante de caja (único)"
-                }
-                value={form.reference}
-                onChange={(v) => change("reference", v)}
-              />
-              <label className="flex gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  required
-                  checked={form.verified || false}
-                  onChange={(e) => change("verified", e.target.checked)}
-                />
-                {presentationMode
-                  ? "Confirmo que revisé el importe y la referencia de esta operación."
-                  : pilotMode
-                    ? "Confirmo que es una simulación y no he recibido dinero real."
-                    : "Confirmo que recibí el efectivo y verifiqué el importe. Los pagos bancarios usan su adaptador."}
-              </label>
-              <Button disabled={busy}>
-                {pilotMode && !presentationMode
-                  ? "Confirmar pago simulado de caja"
-                  : "Registrar efectivo"}
-              </Button>
+            <form className="space-y-3 rounded-xl bg-white p-5" onSubmit={(e) => {
+              e.preventDefault();
+              run(() => operationsService.staffPut(`requests/${selected.id}`, { status: form.status, response: form.response, targetDepartureId: form.target || undefined, seatMap: form.seatPairs ? Object.fromEntries(String(form.seatPairs).split(",").filter(Boolean).map((p) => p.split(/→|->/).map((x) => x.trim()))) : undefined }));
+              setSelected(null);
+            }}>
+              <h2 className="font-bold">Atender solicitud</h2>
+              <Field label="Estado" value={form.status} onChange={(v) => change("status", v)} options={requestStatuses.map((v) => ({ value: v, label: operationLabel(v) }))} />
+              <Field label="Respuesta al pasajero" value={form.response} onChange={(v) => change("response", v)} />
+              {selected.kind === "reprogram" && (
+                <>
+                  <Field label="Salida destino (ID)" required={form.status === "resolved"} value={form.target} onChange={(v) => change("target", v)} />
+                  <Field label="Asientos (1A→2A,1B→2B)" required={form.status === "resolved"} value={form.seatPairs} onChange={(v) => change("seatPairs", v)} />
+                </>
+              )}
+              {selected.kind === "refund" && form.status === "resolved" && <p className="text-sm text-amber-700">Resolver una devolución aprueba el caso y libera asientos; Finanzas registra el reintegro.</p>}
+              <Button disabled={busy}>Guardar</Button>
             </form>
           )}
-          <CounterBooking
-            departures={departures}
-            policy={policy}
-            disabled={busy}
-            pilotMode={pilotMode}
-            onReserved={async (reservation) => {
-              setNotice(
-                "Reserva de ventanilla confirmada: " + reservation.code,
-              );
-              await load();
-            }}
-          />
-        </>
+        </div>
       )}
-      {view === "departures" && (
-        <>
+
+      {view === "boarding" && (
+        <div className="mx-auto max-w-2xl space-y-4 rounded-xl bg-white p-6">
+          <h2 className="text-lg font-bold">Verificar pasajero por DNI</h2>
+          <form className="flex flex-col gap-3 sm:flex-row" onSubmit={async (e) => {
+            e.preventDefault(); setBusy(true); setError(""); setNotice(""); setBoardingResults([]);
+            try { setBoardingResults(await operationsService.boardingLookup(boardingDni)); }
+            catch (err) { setError(bookingErrorMessage(err)); }
+            finally { setBusy(false); }
+          }}>
+            <input className="input flex-1" placeholder="DNI / documento" value={boardingDni} onChange={(e) => setBoardingDni(e.target.value)} required />
+            <Button disabled={busy}>Buscar</Button>
+          </form>
           <div className="space-y-3">
-            {data.map((d) => (
-              <article key={d.id} className="rounded-xl bg-white p-4">
-                <p className="font-bold">
-                  {d.origin} → {d.destination} · {operationLabel(d.status)}
+            {boardingResults.map((r, i) => (
+              <article key={i} className="rounded-xl border p-4 text-sm">
+                <p className="font-bold">{r.name} · {r.documentType}: {r.documentNumber}</p>
+                <p>{r.route} · {r.travelDate} · Asiento {r.seat}</p>
+                <p>Reserva {r.reservationCode} · {formatDeadline(r.departureAt)}</p>
+                <p className={`mt-1 font-semibold ${r.qrReady ? "text-green-700" : "text-amber-700"}`}>
+                  {r.checkedInAt ? "Ya abordó" : r.qrReady ? "Cuenta con QR/boleto listo" : "No tiene QR emitido"}
                 </p>
-                <p>
-                  {formatDeadline(d.departure_at)} · Bus {d.vehicle_id}
-                </p>
-                <p className="text-sm">
-                  {d.terminal_origin} → {d.terminal_destination}
-                </p>
-                {user.role === "admin" && d.status !== "departed" && (
-                  <Button
-                    className="mt-3"
-                    variant="secondary"
-                    onClick={() => {
-                      setSelected(d);
-                      setForm({});
-                      setMapping({});
-                    }}
-                  >
-                    Cambiar bus o estado
+                {r.qrReady && !r.checkedInAt && (
+                  <Button className="mt-2" variant="secondary" disabled={busy || !r.canBoard} onClick={() => run(async () => operationsService.staffPost("check-in", { token: r.token, documentNumber: r.documentNumber }))}>
+                    {r.canBoard ? "Registrar abordaje" : "Fuera de ventana de abordaje"}
                   </Button>
                 )}
               </article>
             ))}
+            {!boardingResults.length && boardingDni && !busy && !error && <p className="text-sm text-gray-500">Busca un DNI para ver si el pasajero tiene QR.</p>}
           </div>
-          {user.role === "admin" && (
-            <>
-              {selected && (
-                <form
-                  className="space-y-4 rounded-xl bg-white p-5"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    run(() =>
-                      operationsService.staffPut("departures/" + selected.id, {
-                        status: form.status || undefined,
-                        vehicleId: form.vehicleId || undefined,
-                        seatMap: mapping,
-                        message: form.message,
-                      }),
-                    );
-                  }}
-                >
-                  <h2 className="font-bold">Actualizar salida</h2>
-                  <Field
-                    label="Estado"
-                    required={false}
-                    value={form.status}
-                    onChange={(v) => change("status", v)}
-                    options={["scheduled", "closed", "cancelled"].map((v) => ({
-                      value: v,
-                      label: operationLabel(v),
-                    }))}
-                  />
-                  <Field
-                    label="Bus de reemplazo"
-                    required={false}
-                    value={form.vehicleId}
-                    onChange={(v) => change("vehicleId", v)}
-                    options={vehicles.map((v) => ({
-                      value: v.id,
-                      label: v.label,
-                    }))}
-                  />
-                  {form.vehicleId &&
-                    held.map((old) => (
-                      <Field
-                        key={old}
-                        label={"Reubicar asiento " + old}
-                        value={mapping[old]}
-                        onChange={(v) => setMapping({ ...mapping, [old]: v })}
-                        options={(newVehicle?.seats || [])
-                          .filter((s) => !s.blocked)
-                          .map((s) => ({
-                            value: s.id,
-                            label: s.id + " · Piso " + s.floor,
-                          }))}
-                      />
-                    ))}
-                  <Field
-                    label="Motivo y mensaje para pasajeros"
-                    value={form.message}
-                    onChange={(v) => change("message", v)}
-                  />
-                  <Button disabled={busy}>Aplicar y notificar</Button>
-                </form>
-              )}
-              <form
-                className="space-y-4 rounded-xl bg-white p-5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  run(() =>
-                    operationsService.staffPost("departures", {
-                      tripId: Number(form.tripId),
-                      date: form.date,
-                      vehicleId: form.newVehicle,
-                      departureAt: form.date + "T" + form.time + ":00-05:00",
-                      terminalOrigin: form.terminalOrigin,
-                      terminalDestination: form.terminalDestination,
-                      boardingMinutes: Number(form.boarding || 30),
-                    }),
-                  );
-                }}
-              >
-                <h2 className="font-bold">Programar salida</h2>
-                <p className="text-sm">
-                  Publica cada salida con su ruta, tarifa, bus y terminales.
-                  Crear una ruta no publica automáticamente un viaje.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field
-                    label="Ruta y tarifa"
-                    value={form.tripId}
-                    onChange={(v) => change("tripId", v)}
-                    options={routes.map((r) => ({
-                      value: r.id,
-                      label:
-                        r.origin +
-                        " → " +
-                        r.destination +
-                        " · " +
-                        r.service +
-                        " · " +
-                        formatCurrency(r.priceCents / 100),
-                    }))}
-                  />
-                  <Field
-                    label="Fecha"
-                    type="date"
-                    value={form.date}
-                    onChange={(v) => change("date", v)}
-                  />
-                  <Field
-                    label="Hora (Perú)"
-                    type="time"
-                    value={form.time}
-                    onChange={(v) => change("time", v)}
-                  />
-                  <Field
-                    label="Bus"
-                    value={form.newVehicle}
-                    onChange={(v) => change("newVehicle", v)}
-                    options={vehicles.map((v) => ({
-                      value: v.id,
-                      label: v.label,
-                    }))}
-                  />
-                  <Field
-                    label="Terminal y dirección de origen"
-                    value={form.terminalOrigin}
-                    onChange={(v) => change("terminalOrigin", v)}
-                  />
-                  <Field
-                    label="Terminal y dirección de destino"
-                    value={form.terminalDestination}
-                    onChange={(v) => change("terminalDestination", v)}
-                  />
-                  <Field
-                    label="Presentación antes de salida (minutos)"
-                    type="number"
-                    min="15"
-                    max="120"
-                    value={form.boarding || 30}
-                    onChange={(v) => change("boarding", v)}
-                  />
-                </div>
-                <Button disabled={busy}>Publicar salida</Button>
-              </form>
-              <form
-                className="space-y-4 rounded-xl bg-white p-5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const rows = Number(form.rows || 10),
-                    floors = Number(form.floors || 1);
-                  const seats = Array.from(
-                    { length: rows * 4 * floors },
-                    (_, i) => ({
-                      id: Math.floor(i / 4) + 1 + "ABCD"[i % 4],
-                      row: Math.floor((i % (rows * 4)) / 4) + 1,
-                      col: (i % 4) + 1,
-                      floor: Math.floor(i / (rows * 4)) + 1,
-                      category: "Estándar",
-                      blocked: String(form.blockedSeats || "")
-                        .split(",")
-                        .map((s) => s.trim())
-                        .includes(Math.floor(i / 4) + 1 + "ABCD"[i % 4]),
-                    }),
-                  );
-                  const blocked = String(form.blockedSeats || "")
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                  if (
-                    blocked.some((id) => !seats.some((seat) => seat.id === id))
-                  ) {
-                    setError(
-                      "Hay asientos fuera de servicio que no existen en este mapa. Revisa sus identificadores.",
-                    );
-                    return;
-                  }
-                  run(() =>
-                    operationsService.staffPost("vehicles", {
-                      id: form.busId,
-                      label: form.busLabel,
-                      seats,
-                    }),
-                  );
-                }}
-              >
-                <h2 className="font-bold">Agregar mapa de bus</h2>
-                <Field
-                  label="Identificador del vehículo"
-                  value={form.busId}
-                  onChange={(v) => change("busId", v)}
-                />
-                <Field
-                  label="Nombre del vehículo"
-                  value={form.busLabel}
-                  onChange={(v) => change("busLabel", v)}
-                />
-                <Field
-                  label="Pisos"
-                  value={form.floors || 1}
-                  onChange={(v) => change("floors", v)}
-                  options={[1, 2].map((n) => ({ value: n, label: String(n) }))}
-                />
-                <Field
-                  label="Filas por piso (4 asientos por fila)"
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={form.rows || 10}
-                  onChange={(v) => change("rows", v)}
-                />
-                <Field
-                  label="Asientos fuera de servicio (ej. 1A,2B)"
-                  required={false}
-                  value={form.blockedSeats}
-                  onChange={(v) => change("blockedSeats", v)}
-                />
-                <Button disabled={busy}>Guardar vehículo</Button>
-                <p className="text-xs">
-                  Revisa el mapa y los asientos fuera de servicio antes de
-                  publicar una salida.
-                </p>
-              </form>
+        </div>
+      )}
 
-              <form
-                className="space-y-4 rounded-xl bg-white p-5"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  run(() =>
-                    operationsService.staffPost("routes", {
-                      origin: form.routeOrigin,
-                      destination: form.routeDestination,
-                      service: form.routeService,
-                      durationMinutes: Number(form.routeDuration),
-                      priceCents: Math.round(Number(form.routePrice) * 100),
-                      serviceDescription: form.routeDescription || "",
-                      features: String(form.routeFeatures || "")
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    }),
-                  );
-                }}
-              >
-                <h2 className="font-bold">Crear ruta y tarifa</h2>
-                <p className="text-sm">
-                  Se crea una versión nueva; no cambia importes de reservas
-                  existentes.
-                </p>
-                <Field
-                  label="Ciudad de origen"
-                  value={form.routeOrigin}
-                  onChange={(v) => change("routeOrigin", v)}
-                />
-                <Field
-                  label="Ciudad de destino"
-                  value={form.routeDestination}
-                  onChange={(v) => change("routeDestination", v)}
-                />
-                <Field
-                  label="Servicio"
-                  value={form.routeService}
-                  onChange={(v) => change("routeService", v)}
-                />
-                <Field
-                  label="Duración estimada en minutos"
-                  type="number"
-                  min="15"
-                  value={form.routeDuration}
-                  onChange={(v) => change("routeDuration", v)}
-                />
-                <Field
-                  label="Tarifa por asiento en soles"
-                  type="number"
-                  min="0.01"
-                  value={form.routePrice}
-                  onChange={(v) => change("routePrice", v)}
-                />
-                <Field
-                  label="Descripción del servicio"
-                  required={false}
-                  value={form.routeDescription}
-                  onChange={(v) => change("routeDescription", v)}
-                />
-                <Field
-                  label="Servicios incluidos (separados por comas)"
-                  required={false}
-                  value={form.routeFeatures}
-                  onChange={(v) => change("routeFeatures", v)}
-                />
-                <p className="text-sm">
-                  Publica únicamente características verificadas para este
-                  servicio. No se agregan servicios de ejemplo.
-                </p>
-                <Button disabled={busy}>Crear ruta y tarifa</Button>
-              </form>
-            </>
-          )}
-        </>
-      )}
-      {view === "requests" && (
-        <>
-          {data.map((s) => (
-            <article key={s.id} className="space-y-2 rounded-xl bg-white p-4">
-              <p className="font-bold">
-                {operationLabel(s.kind)} · {operationLabel(s.status)}
-              </p>
-              <p>{s.message}</p>
-              <p className="break-all text-xs">
-                {s.id} · {s.reservation_code}
-              </p>
-              <p>{s.response}</p>
-              {!["resolved", "rejected"].includes(s.status) && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setSelected(s);
-                    setForm({ status: "in_review" });
-                  }}
-                >
-                  Atender solicitud
-                </Button>
-              )}
-            </article>
-          ))}
-          {selected && (
-            <form
-              className="space-y-4 rounded-xl bg-white p-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const seatMap = Object.fromEntries(
-                  String(form.seatPairs || "")
-                    .split(",")
-                    .filter(Boolean)
-                    .map((pair) =>
-                      pair
-                        .trim()
-                        .split("→")
-                        .map((s) => s.trim()),
-                    ),
-                );
-                run(() =>
-                  operationsService.staffPut("requests/" + selected.id, {
-                    status: form.status,
-                    response: form.response,
-                    targetDepartureId: form.target,
-                    seatMap,
-                  }),
-                );
-              }}
-            >
-              <h2 className="font-bold">Respuesta y resolución</h2>
-              <Field
-                label="Estado"
-                value={form.status}
-                onChange={(v) => change("status", v)}
-                options={["in_review", "resolved", "rejected"].map((v) => ({
-                  value: v,
-                  label: v,
-                }))}
-              />
-              <Field
-                label="Respuesta al pasajero"
-                value={form.response}
-                onChange={(v) => change("response", v)}
-              />
-              {selected.kind === "reprogram" && (
-                <>
-                  <Field
-                    label="Salida de destino"
-                    required={form.status === "resolved"}
-                    value={form.target}
-                    onChange={(v) => change("target", v)}
-                    options={depOptions}
-                  />
-                  <Field
-                    label="Asientos anteriores y nuevos (ej. 1A→2A,1B→2B)"
-                    required={form.status === "resolved"}
-                    value={form.seatPairs}
-                    onChange={(v) => change("seatPairs", v)}
-                  />
-                </>
-              )}
-              {selected.kind === "refund" && (
-                <p className="text-sm">
-                  Resolver aprueba la devolución y libera los asientos. Finanzas
-                  debe registrar después el comprobante real del reintegro.
-                </p>
-              )}
-              <Button disabled={busy}>Registrar respuesta</Button>
-            </form>
-          )}
-        </>
-      )}
       {view === "financial" && (
-        <>
+        <div className="space-y-3">
           {data.map((c) => (
             <article key={c.id} className="space-y-2 rounded-xl bg-white p-4">
-              <p className="font-bold">
-                {operationLabel(c.reason)} · {operationLabel(c.status)}
-              </p>
-              <p className="break-all text-xs">
-                {c.id} · {c.reservation_code || "Reserva desconocida"} ·{" "}
-                {c.payment_reference}
-              </p>
+              <p className="font-bold">{operationLabel(c.reason)} · {operationLabel(c.status)}</p>
+              <p className="break-all text-xs">{c.id} · {c.reservation_code || "-"} · {c.payment_reference}</p>
               <p>{c.response}</p>
-              {c.status !== "resolved" && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setSelected(c);
-                    setForm({});
-                  }}
-                >
-                  {pilotMode && !presentationMode
-                    ? "Simular devolución"
-                    : "Registrar devolución efectuada"}
-                </Button>
-              )}
             </article>
           ))}
-          {selected && (
-            <form
-              className="space-y-4 rounded-xl bg-white p-5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                run(() =>
-                  operationsService.staffPut("financial/" + selected.id, {
-                    reference: form.reference,
-                    amountCents: Math.round(Number(form.amount) * 100),
-                    response: form.response,
-                    simulate: pilotMode,
-                  }),
-                );
-              }}
-            >
-              <h2 className="font-bold">
-                {pilotMode && !presentationMode
-                  ? "Devolución ficticia del piloto"
-                  : "Comprobante de reintegro"}
-              </h2>
-              <p className="text-sm">
-                {pilotMode && !presentationMode
-                  ? "Esta acción solo cierra un caso de prueba; no devuelve dinero ni ordena transferencias."
-                  : "Registra una devolución ya verificada. Esta acción no ordena una transferencia bancaria."}
-              </p>
-              <Field
-                label={
-                  pilotMode && !presentationMode
-                    ? "Referencia ficticia única de la devolución"
-                    : "Referencia única del reintegro"
-                }
-                value={form.reference}
-                onChange={(v) => change("reference", v)}
-              />
-              <Field
-                label="Importe en soles"
-                type="number"
-                min="0.01"
-                value={form.amount}
-                onChange={(v) => change("amount", v)}
-              />
-              <Field
-                label="Detalle para el pasajero"
-                value={form.response}
-                onChange={(v) => change("response", v)}
-              />
-              <Button disabled={busy}>
-                {pilotMode && !presentationMode
-                  ? "Confirmar devolución simulada"
-                  : "Registrar comprobante"}
-              </Button>
-              <hr className="my-4" />
-              <Field
-                label="Fecha estimada de solución (hora de Perú)"
-                type="datetime-local"
-                required={false}
-                value={form.expectedResolution}
-                onChange={(v) => change("expectedResolution", v)}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy || !form.expectedResolution || !form.response}
-                onClick={() =>
-                  run(() =>
-                    operationsService.staffPut(
-                      "financial/" + selected.id + "/estimate",
-                      {
-                        expectedResolutionAt:
-                          form.expectedResolution + ":00-05:00",
-                        response: form.response,
-                      },
-                    ),
-                  )
-                }
-              >
-                Comunicar fecha estimada sin registrar reintegro
-              </Button>
-            </form>
-          )}
-        </>
+        </div>
       )}
-      {view === "boarding" && (
-        <form
-          className="space-y-4 rounded-xl bg-white p-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(async () => {
-              const result = await operationsService.staffPost("check-in", {
-                token,
-                documentNumber: form.boardingDocument,
-              });
-              return {
-                message:
-                  "Abordaje registrado: " +
-                  result.passenger.name +
-                  " · asiento " +
-                  result.passenger.seat,
-              };
-            });
-          }}
-        >
-          <h2 className="font-bold">Control de boleto y documento</h2>
-          <Field
-            label="Código leído del boleto"
-            value={token}
-            onChange={setToken}
-          />
-          <BoardingScanner onScan={setToken} />
-          <Field
-            label="Documento físico del viajero"
-            value={form.boardingDocument}
-            onChange={(v) => change("boardingDocument", v)}
-          />
-          <p className="text-sm">
-            Ingresa el documento físico para compararlo con el boleto. Un boleto
-            admite un único abordaje.
-          </p>
-          <Button disabled={busy}>Validar y registrar abordaje</Button>
-        </form>
-      )}
+
       {view === "settings" && policy && (
-        <form
-          className="space-y-4 rounded-xl bg-white p-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(() =>
-              operationsService.staffPut("policies", {
-                ...policy,
-                ...form,
-                serviceResponseHours: Object.hasOwn(
-                  form,
-                  "serviceResponseHours",
-                )
-                  ? form.serviceResponseHours === ""
-                    ? null
-                    : Number(form.serviceResponseHours)
-                  : policy.serviceResponseHours,
-                baggageKg: Object.hasOwn(form, "baggageKg")
-                  ? form.baggageKg === ""
-                    ? null
-                    : Number(form.baggageKg)
-                  : policy.baggageKg,
-                retentionDays: Object.hasOwn(form, "retentionDays")
-                  ? form.retentionDays === ""
-                    ? null
-                    : Number(form.retentionDays)
-                  : policy.retentionDays,
-              }),
-            );
-          }}
-        >
-          <h2 className="font-bold">Configuración comercial y privacidad</h2>
-          {[
-            ["legalName", "Razón social"],
-            ["taxId", "RUC (11 dígitos)"],
-            ["address", "Domicilio"],
-            ["supportEmail", "Correo de atención"],
-            ["supportPhone", "Teléfono de atención"],
-            ["supportHours", "Horario de atención"],
-            [
-              "paymentInstructions",
-              "Medios de pago e instrucciones verificadas",
-            ],
-            ["changePolicy", "Condiciones de cambios"],
-            ["refundPolicy", "Condiciones de devoluciones"],
-            [
-              "serviceResponseHours",
-              "Primera respuesta a solicitudes (horas calendario)",
-            ],
-            ["baggageKg", "Franquicia de equipaje (kg)"],
-            ["retentionDays", "Conservación propuesta (días)"],
-          ].map(([key, label]) => (
-            <Field
-              key={key}
-              label={label}
-              required={false}
-              value={form[key] ?? policy[key]}
-              onChange={(v) => change(key, v)}
-            />
+        <form className="space-y-4 rounded-xl bg-white p-6" onSubmit={(e) => { e.preventDefault(); run(() => operationsService.staffPut("policies", { ...policy, ...form })); }}>
+          <h2 className="font-bold">Configuración comercial</h2>
+          {[ ["legalName","Razón social"],["taxId","RUC"],["address","Domicilio"],["supportEmail","Correo"],["supportPhone","Teléfono"],["supportHours","Horario"],["paymentInstructions","Medios de pago"],["changePolicy","Cambios"],["refundPolicy","Devoluciones"] ].map(([key,label]) => (
+            <Field key={key} label={label} required={false} value={form[key] ?? policy[key]} onChange={(v) => change(key, v)} />
           ))}
-          <p className="text-sm">
-            El operador debe aprobar estas políticas y validar sus obligaciones
-            legales. La conservación no activa una eliminación automática.
-          </p>
           <Button disabled={busy}>Publicar políticas</Button>
         </form>
       )}
+
       {view === "users" && (
         <>
-          <StaffAccess
-            users={data}
-            actor={user}
-            onUpdated={async (result) => {
-              setNotice(result.message);
-              if (result.user.id === user.id && result.sessionsRevoked) {
-                await useAuthStore.getState().logout();
-              } else await load();
-            }}
-          />
-          <form
-            className="space-y-4 rounded-xl bg-white p-5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(() => operationsService.staffPost("users", form)).then(
-                (result) => {
-                  if (result) setForm({});
-                },
-              );
-            }}
-          >
+          <StaffAccess users={data} actor={user} onUpdated={async (result) => { setNotice(result.message); if (result.user?.id === user.id && result.sessionsRevoked) await useAuthStore.getState().logout(); else await load(); }} />
+          <form className="space-y-4 rounded-xl bg-white p-5" onSubmit={(e) => { e.preventDefault(); run(() => operationsService.staffPost("users", form)).then((r) => r && setForm({})); }}>
             <h2 className="font-bold">Crear cuenta del personal</h2>
-            <Field
-              label="Nombre"
-              value={form.name}
-              onChange={(v) => change("name", v)}
-            />
-            <Field
-              label="Correo"
-              type="email"
-              value={form.email}
-              onChange={(v) => change("email", v)}
-            />
-            <Field
-              label="Contraseña inicial (mínimo 12 caracteres)"
-              type="password"
-              value={form.password}
-              onChange={(v) => change("password", v)}
-            />
-            <Field
-              label="Rol"
-              value={form.role}
-              onChange={(v) => change("role", v)}
-              options={["agent", "finance", "boarding", "admin"].map((v) => ({
-                value: v,
-                label: v,
-              }))}
-            />
-            <Button disabled={busy}>Crear cuenta autorizada</Button>
+            <Field label="Nombre" value={form.name} onChange={(v) => change("name", v)} />
+            <Field label="Correo" type="email" value={form.email} onChange={(v) => change("email", v)} />
+            <Field label="Contraseña inicial (mín. 12)" type="password" value={form.password} onChange={(v) => change("password", v)} />
+            <Field label="Rol" value={form.role} onChange={(v) => change("role", v)} options={["agent","finance","boarding","admin"].map((v)=>({value:v,label:operationLabel(v)}))} />
+            <Button disabled={busy}>Crear cuenta</Button>
           </form>
         </>
       )}

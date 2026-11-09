@@ -1,5 +1,6 @@
 import {
   randomBytes,
+  randomInt,
   randomUUID,
   scryptSync,
   timingSafeEqual,
@@ -15,17 +16,25 @@ function passwordHash(password) {
   if (
     typeof password !== "string" ||
     password.length < 12 ||
-    password.length > 128
+    password.length > 128 ||
+    !/[a-z]/i.test(password) ||
+    !/\d/.test(password)
   )
     fail(
       400,
       "INVALID_PASSWORD",
-      "Usa una contraseña de entre 12 y 128 caracteres.",
+      "Usa una contraseña de 12 a 128 caracteres con al menos una letra y un número.",
     );
   const salt = randomBytes(16).toString("hex");
   return salt + ":" + scryptSync(password, salt, 64).toString("hex");
 }
 const dummySalt = "foxbus-constant-login-padding";
+function normalizeEmail(email) {
+  return typeof email === "string"
+    ? email.toLowerCase().trim().replace(/\.+$/, "")
+    : "";
+}
+
 export class AuthStore {
   constructor(store) {
     this.store = store;
@@ -35,17 +44,17 @@ export class AuthStore {
     { name, email, password, acceptTerms, policyVersion },
     role = "passenger",
   ) {
+    const normalized = normalizeEmail(email);
     if (
       typeof name !== "string" ||
       !name.trim() ||
       name.length > 150 ||
-      typeof email !== "string" ||
-      email.length > 254 ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      normalized.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
     )
       fail(400, "INVALID_USER", "Revisa nombre y correo.");
     if (!["passenger", "agent", "finance", "boarding", "admin"].includes(role))
-      fail(400, "INVALID_ROLE", "Rol inválido.");
+      fail(400, "INVALID_ROLE", "Rol invǭlido.");
     if (
       role === "passenger" &&
       (acceptTerms !== true || policyVersion !== this.store.policy().version)
@@ -55,8 +64,7 @@ export class AuthStore {
         "TERMS_REQUIRED",
         "Acepta las condiciones y el aviso de privacidad.",
       );
-    const normalized = email.toLowerCase().trim(),
-      hash = passwordHash(password);
+    const hash = passwordHash(password);
     return this.store.transaction((now) => {
       if (this.db.prepare("SELECT id FROM users WHERE email=?").get(normalized))
         fail(409, "EMAIL_EXISTS", "Ese correo ya tiene una cuenta.");
@@ -82,9 +90,17 @@ export class AuthStore {
     });
   }
   login(email, password) {
-    const user = this.db
+    const normalized = normalizeEmail(email);
+    let user = this.db
       .prepare("SELECT * FROM users WHERE email=? AND active=1")
-      .get(typeof email === "string" ? email.toLowerCase().trim() : "");
+      .get(normalized);
+    if (!user && typeof email === "string") {
+      const legacy = email.toLowerCase().trim();
+      if (legacy && legacy !== normalized)
+        user = this.db
+          .prepare("SELECT * FROM users WHERE email=? AND active=1")
+          .get(legacy);
+    }
     const [salt, expected] = (
       user?.password_hash || dummySalt + ":" + "0".repeat(128)
     ).split(":");
@@ -94,8 +110,82 @@ export class AuthStore {
       64,
     );
     if (!user || !timingSafeEqual(Buffer.from(expected, "hex"), calculated))
-      fail(401, "INVALID_CREDENTIALS", "Correo o contraseña incorrectos.");
+      fail(401, "INVALID_CREDENTIALS", "Correo o contrase��a incorrectos.");
     return publicUser(user);
+  }
+  startLogin(email, password) {
+    const user = this.login(email, password);
+    const challenge = randomBytes(32).toString("hex"),
+      code = String(randomInt(0, 1000000)).padStart(6, "0"),
+      now = this.store.clock();
+    const clear = iso(now),
+      expires = iso(now + 10 * 60000);
+    this.db
+      .prepare(
+        "DELETE FROM login_challenges WHERE expires_at<=? OR used_at IS NOT NULL",
+      )
+      .run(clear);
+    this.db
+      .prepare(
+        "INSERT INTO login_challenges(hash,user_id,code_hash,attempts,expires_at,used_at,created_at) VALUES (?,?,?,0,?,NULL,?)",
+      )
+      .run(
+        digest(challenge),
+        user.id,
+        digest(challenge + ":" + code),
+        expires,
+        iso(now),
+      );
+    this.store.queueMail(
+      accountOwner(user.id),
+      user.email,
+      "Código de verificación",
+      `Tu código de verificación FoxBus es ${code}. Vence en 10 minutos. Si no iniciaste sesión, ignora este mensaje.`,
+    );
+    const [name, domain] = user.email.split("@");
+    return {
+      twoFactorRequired: true,
+      challenge,
+      email: name.slice(0, 1) + "***@" + domain,
+      expiresInMinutes: 10,
+      message:
+        "Enviamos un código de verificación al correo de tu cuenta. Revisa también la carpeta de spam.",
+    };
+  }
+  verifyLogin(challenge, code, previousToken) {
+    const hash = digest(String(challenge || ""));
+    return this.store.transaction((now) => {
+      const row = this.db
+        .prepare("SELECT * FROM login_challenges WHERE hash=?")
+        .get(hash);
+      if (!row || row.used_at)
+        fail(410, "CHALLENGE_EXPIRED", "El código expiró. Inicia sesión otra vez.");
+      if (row.expires_at <= iso(now))
+        fail(410, "CHALLENGE_EXPIRED", "El código expiró. Inicia sesión otra vez.");
+      if (Number(row.attempts) >= 5)
+        fail(429, "TOO_MANY_ATTEMPTS", "Demasiados intentos. Solicita un código nuevo.");
+      if (!/^\d{6}$/.test(String(code || "")))
+        fail(400, "INVALID_2FA_CODE", "Ingresa el código de 6 dígitos.");
+      const expected = Buffer.from(row.code_hash, "hex");
+      const received = Buffer.from(
+        digest(String(challenge || "") + ":" + code),
+        "hex",
+      );
+      if (!timingSafeEqual(expected, received)) {
+        this.db
+          .prepare("UPDATE login_challenges SET attempts=attempts+1 WHERE hash=?")
+          .run(hash);
+        fail(401, "INVALID_2FA_CODE", "El código no es correcto.");
+      }
+      const user = this.db
+        .prepare("SELECT * FROM users WHERE id=? AND active=1")
+        .get(row.user_id);
+      if (!user) fail(401, "INVALID_CREDENTIALS", "La cuenta no está activa.");
+      this.db
+        .prepare("UPDATE login_challenges SET used_at=? WHERE hash=?")
+        .run(iso(now), hash);
+      return { user: publicUser(user), token: this.issue(user, previousToken) };
+    });
   }
   issue(user, previousToken) {
     if (previousToken)
@@ -141,11 +231,16 @@ export class AuthStore {
       const target = accountOwner(user.id);
       // La prueba de propiedad es la credencial del navegador, nunca un correo
       // coincidente. No se alteran estado, importe, asientos ni vencimientos.
-      this.db
+      const grants = this.db
         .prepare(
-          "INSERT INTO reservation_grants SELECT reservation_code,?,expires_at FROM reservation_grants WHERE owner_hash=? ON CONFLICT(reservation_code,owner_hash) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at)",
+          "SELECT reservation_code,expires_at FROM reservation_grants WHERE owner_hash=?",
         )
-        .run(target, guestOwner);
+        .all(guestOwner);
+      const upsert = this.db.prepare(
+        "INSERT INTO reservation_grants(reservation_code,owner_hash,expires_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE expires_at=GREATEST(expires_at,VALUES(expires_at))",
+      );
+      for (const grant of grants)
+        upsert.run(grant.reservation_code, target, grant.expires_at);
       this.db
         .prepare("DELETE FROM reservation_grants WHERE owner_hash=?")
         .run(guestOwner);
@@ -239,9 +334,17 @@ export class AuthStore {
     });
   }
   requestReset(email) {
-    const user = this.db
+    const normalized = normalizeEmail(email);
+    let user = this.db
       .prepare("SELECT id,email FROM users WHERE email=? AND active=1")
-      .get(typeof email === "string" ? email.toLowerCase().trim() : "");
+      .get(normalized);
+    if (!user && typeof email === "string") {
+      const legacy = email.toLowerCase().trim();
+      if (legacy && legacy !== normalized)
+        user = this.db
+          .prepare("SELECT id,email FROM users WHERE email=? AND active=1")
+          .get(legacy);
+    }
     if (user) {
       const token = randomBytes(32).toString("hex"),
         hash = digest(token);

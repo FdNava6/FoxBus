@@ -36,12 +36,13 @@ export const operationLabels = {
 };
 export const operationLabel = (value) =>
   operationLabels[value] || value || "Sin dato";
-export const emptyStaffFilters = () => ({
+export const emptyStaffFilters = (view) => ({
   search: "",
-  status: "",
+  status: view === "reservations" ? "paid" : "",
   from: "",
   to: "",
   channel: "",
+  kind: "",
 });
 export function newCounterDraft(departureId = "") {
   return {

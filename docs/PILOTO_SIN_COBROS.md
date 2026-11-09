@@ -26,7 +26,7 @@ Abrir http://localhost:5173/piloto. El backend utiliza 8080: detener únicamente
 
 Si se venían haciendo pruebas en la base anterior, abrir una pestaña nueva para no retomar el borrador temporal de otra instancia. Sus reservas no se trasladan al piloto.
 
-El lanzamiento fija APP_MODE=pilot y una base exclusiva en backend/data/pilot/foxbus.sqlite. No lee backend/.env ni modifica backend/data/foxbus.sqlite. Puede leerse un archivo privado .env.pilot basado en .env.pilot.example para puertos y accesos. .env.pilot, cuentas y bases quedan fuera de Git.
+El lanzamiento fija APP_MODE=pilot y una base MySQL exclusiva `foxbus_pilot`. No lee backend/.env ni modifica la base de ventas `foxbus`. El usuario MySQL necesita permisos sobre `foxbus_pilot`. Puede leerse un archivo privado .env.pilot basado en .env.pilot.example para puertos y accesos. .env.pilot, cuentas y bases quedan fuera de Git.
 
 Si las dependencias ya están instaladas pero npm no está disponible en el PATH del entorno de Codex, pueden ejecutarse directamente `node --env-file-if-exists=.env.pilot src/pilot.js` desde backend y `node node_modules/vite/bin/vite.js --host localhost --port 5173 --strictPort` desde frontend.
 
@@ -57,13 +57,13 @@ La advertencia de documento sin validez aparece también al imprimir boletos y c
 Duración propuesta: 15–20 minutos por participante. Una persona facilita y otra observa; para probar permisos, asignar roles distintos a cuentas distintas. Explicar: “No estamos evaluándote a ti; estamos probando el sistema. Puedes parar cuando quieras. Usa solo los datos ficticios proporcionados”. Pedir consentimiento para observar y anotar; no grabar ni recolectar identidad real por defecto.
 
 1. Encontrar Lima–Trujillo para mañana e identificar duración, llegada, terminales y precio del grupo.
-2. Seleccionar asiento, completar datos, recargar y retomar sin renovar los 10 minutos originales.
-3. Confirmar sin pagar; explicar el plazo de 2 horas y cancelar una primera reserva.
+2. Seleccionar asiento, completar datos, recargar y retomar sin renovar los 2 minutos originales.
+3. Confirmar sin pagar; explicar el plazo de 3 minutos y cancelar una primera reserva.
 4. Hacer una nueva reserva, simular pago y guardar comprobante y QR identificados como prueba.
 5. Consultar desde otra cuenta/dispositivo autorizado o recuperar como invitado mediante su enlace.
 6. Registrar una devolución o reclamo de prueba y consultar la respuesta. El personal simula el cierre financiero, sin efectivo ni transferencia.
 
-Los plazos del producto siguen siendo exactamente 10 minutos y 2 horas. Para probar vencimientos completos puede esperarse esos tiempos; la suite automática los verifica adelantando solo un reloj y una base aislados. No hay un botón que cambie el reloj o venza todas las reservas del piloto.
+Los plazos del producto siguen siendo exactamente 2 minutos y 3 minutos. Para probar vencimientos completos puede esperarse esos tiempos; la suite automática los verifica adelantando solo un reloj y una base aislados. No hay un botón que cambie el reloj o venza todas las reservas del piloto.
 
 ## Registro de resultados
 
@@ -77,7 +77,7 @@ npm run pilot:report
 npm run pilot:backup
 ```
 
-El informe devuelve conteos agregados de reservas, pagos simulados, expiraciones, boletos, abordajes de prueba y solicitudes, con integridad SQLite. No exporta códigos, nombres, correos, documentos ni dinero recaudado. No mide participantes únicos, tareas sin ayuda o intención de compra: esas métricas provienen de observación. La API equivalente /api/staff/pilot-report exige admin. Revisar la salud del job para interpretar el estado; el informe no renueva plazos ni realiza ventas.
+El informe devuelve conteos agregados de reservas, pagos simulados, expiraciones, boletos, abordajes de prueba y solicitudes, con verificación de conexión MySQL. No exporta códigos, nombres, correos, documentos ni dinero recaudado. No mide participantes únicos, tareas sin ayuda o intención de compra: esas métricas provienen de observación. La API equivalente /api/staff/pilot-report exige admin. Revisar la salud del job para interpretar el estado; el informe no renueva plazos ni realiza ventas.
 
 También puede consultarse desde el panel administrativo, Estado del servicio → Consultar informe del piloto. El registro operativo y auditoría del mismo panel sí tienen identificadores de gestión y son privados del personal; no publicarlos como informe agregado.
 

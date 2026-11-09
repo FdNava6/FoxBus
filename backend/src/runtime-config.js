@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { mysqlSettings } from "./mysql/settings.js";
 
 const externalKeys = [
   "PAYMENT_WEBHOOK_SECRET",
@@ -25,10 +25,12 @@ export function runtimeConfig(env = process.env) {
   return {
     mode,
     pilotMode,
-    databasePath: resolve(
-      env.DATABASE_PATH ||
-        (pilotMode ? "./data/pilot/foxbus.sqlite" : "./data/foxbus.sqlite"),
-    ),
+    mysql: {
+      ...mysqlSettings(env),
+      database:
+        String(env.MYSQL_DATABASE || "").trim() ||
+        (pilotMode ? "foxbus_pilot" : "foxbus"),
+    },
     demoPayments:
       pilotMode || (env.DEMO_PAYMENTS === "true" && mode !== "production"),
     seedDemoData:
@@ -43,10 +45,10 @@ export function runtimeConfig(env = process.env) {
 // Marca persistente: un piloto nunca adopta una base operativa existente ni
 // puede activarse posteriormente como ventas reales por cambiar un flag.
 export function bindDatabaseMode(store, mode) {
-  store.db.exec("BEGIN IMMEDIATE");
+  store.db.exec("START TRANSACTION");
   try {
     const marker = store.db
-      .prepare("SELECT value FROM operator_settings WHERE key='runtime_mode'")
+      .prepare("SELECT value FROM operator_settings WHERE `key`='runtime_mode'")
       .get()?.value;
     if (marker === "pilot" && mode !== "pilot")
       throw new Error(
@@ -69,7 +71,7 @@ export function bindDatabaseMode(store, mode) {
           );
         store.db
           .prepare(
-            "INSERT INTO operator_settings(key,value) VALUES ('runtime_mode','pilot')",
+            "INSERT INTO operator_settings(`key`,value) VALUES ('runtime_mode','pilot')",
           )
           .run();
       }
@@ -127,8 +129,6 @@ export function pilotReport(store) {
     jobs: store.db
       .prepare("SELECT name,last_success_at,last_error FROM job_health")
       .all(),
-    integrity: Object.values(
-      store.db.prepare("PRAGMA integrity_check").get(),
-    )[0],
+    integrity: store.integrity(),
   };
 }

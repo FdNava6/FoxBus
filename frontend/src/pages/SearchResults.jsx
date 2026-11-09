@@ -6,17 +6,15 @@
 // ============================================
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { MapPin, Clock, Users, ArrowRight, Bus } from "lucide-react";
+import { ArrowRight, Bus } from "lucide-react";
 import Loading from "../components/common/Loading";
 import { useTripStore } from "../store/useTripStore";
 import { useCartStore } from "../store/useCartStore";
 import { tripService } from "../services/tripService";
 import { ROUTES } from "../utils/constants";
 import { formatTime, formatCurrency } from "../utils/helpers";
-import { tripDuration, limaToday, formatDeadline } from "../utils/bookingTime";
+import { limaToday } from "../utils/bookingTime";
 import SearchBox from "../components/landing/SearchBox";
-import { operationsService } from "../services/operationsService";
-import ServiceDetails from "../components/common/ServiceDetails";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import { clearDraft } from "../utils/bookingDraft";
 import {
@@ -38,21 +36,12 @@ export default function SearchResults() {
           origin: p.get("origin") || "Lima",
           destination: p.get("destination") || "Trujillo",
           date: p.get("date") || limaToday(),
-          passengers: Number(p.get("passengers") || 1),
         };
   }, [location.state, location.search]);
   const [trips, setTrips] = useState([]),
-    [policy, setPolicy] = useState(null),
     [sort, setSort] = useState("departure"),
-    [otherDates, setOtherDates] = useState([]),
     [switchTarget, setSwitchTarget] = useState(null),
     [switching, setSwitching] = useState(false);
-  useEffect(() => {
-    operationsService
-      .policy()
-      .then(setPolicy)
-      .catch(() => {});
-  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -66,20 +55,9 @@ export default function SearchResults() {
           searchData.origin,
           searchData.destination,
           searchData.date,
-          searchData.passengers,
         );
         if (!active) return;
         setTrips(data);
-        if (!data.length)
-          operationsService
-            .upcomingDates(searchData)
-            .then((d) => {
-              if (active) setOtherDates(d);
-            })
-            .catch(() => {
-              if (active) setOtherDates([]);
-            });
-        else setOtherDates([]);
       } catch (e) {
         if (!active) return;
         setTrips([]);
@@ -96,7 +74,7 @@ export default function SearchResults() {
 
   const chooseTrip = (trip) => {
     selectTrip(trip);
-    setTrip({ ...trip, passengerCount: searchData.passengers });
+    setTrip({ ...trip, passengerCount: 1 });
     navigate(ROUTES.SEAT_SELECTION);
   };
   const handleSelect = (trip) => {
@@ -170,15 +148,6 @@ export default function SearchResults() {
             {error}
           </p>
         )}
-        <div className="flex items-center gap-2 text-gray-500 mb-8">
-          <MapPin className="w-4 h-4 text-fox-pink" />
-          <span className="font-medium">{searchData.origin}</span>
-          <ArrowRight className="w-4 h-4" />
-          <span className="font-medium">{searchData.destination}</span>
-          <span className="mx-2">•</span>
-          <span>{searchData.passengers || 1} pasajero(s)</span>
-        </div>
-
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <label htmlFor="trip-sort" className="text-sm font-semibold">
             Ordenar viajes
@@ -193,130 +162,63 @@ export default function SearchResults() {
             <option value="price">Menor precio</option>
             <option value="duration">Menor duración</option>
           </select>
-          <p className="text-sm text-gray-600">
-            Fecha: {searchData.date} · Hora de Perú
-          </p>
         </div>
-        <p className="mb-5 text-sm text-gray-600">
-          La reserva con pago diferido cierra 10 minutos + 2 horas + el tiempo
-          de presentación antes de salir. No se ofrecen aquí compras de última
-          hora fuera de ese plazo.
-        </p>
         {loading ? (
           <Loading text="Buscando viajes..." />
         ) : (
           <div className="space-y-4">
             {!error && trips.length === 0 && (
-              <p>
-                No hay salidas programadas que admitan reservas en esa fecha.
-                Prueba otro día.
-              </p>
-            )}
-            {!loading && !error && !trips.length && otherDates.length > 0 && (
-              <div className="rounded-xl bg-blue-50 p-4">
-                <p className="mb-3 font-semibold">
-                  Otras fechas con salidas disponibles
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {otherDates.map((d) => (
-                    <button
-                      key={d.date}
-                      className="min-h-11 rounded-lg border bg-white px-3"
-                      onClick={() =>
-                        navigate(
-                          "/resultados?" +
-                            new URLSearchParams({
-                              ...searchData,
-                              date: d.date,
-                            }),
-                        )
-                      }
-                    >
-                      {d.date} · {d.count} salida(s)
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <p>No se encuentran viajes para ese destino.</p>
             )}
             {orderedTrips.map((trip) => (
               <div
                 key={trip.id}
-                className="bg-white rounded-2xl shadow-sm p-6 flex flex-col md:flex-row md:flex-wrap items-center justify-between gap-6 hover:shadow-fox-lg transition-shadow"
+                className="bg-white rounded-2xl shadow-sm p-6 hover:shadow-fox-lg transition-shadow"
               >
-                {/* Hora y ruta */}
-                <div className="flex items-center gap-6">
-                  <div className="p-3 bg-fox-pink/10 text-fox-pink rounded-xl">
-                    <Bus className="w-8 h-8" />
+                <div className="grid gap-5 md:grid-cols-3 md:items-center">
+                  <div className="md:order-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Tipo de bus
+                    </p>
+                    <p className="mt-1 font-semibold text-gray-800">
+                      {trip.service}
+                    </p>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-bold text-gray-800">
-                        {formatTime(`2000-01-01T${trip.departureTime}`)}
-                      </span>
-                      <ArrowRight className="w-5 h-5 text-gray-400" />
-                      <span className="text-2xl font-bold text-gray-800">
-                        {formatTime(`2000-01-01T${trip.arrivalTime}`)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-gray-700">
-                      {tripDuration(trip)}
+                  <div className="order-first text-center md:order-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Salida - llegada
                     </p>
-                    <p className="mt-1 text-sm">
-                      Salida: {formatDeadline(trip.departure_at)} (Perú)
-                    </p>
-                    <p className="text-sm">
-                      Llegada estimada: {formatDeadline(trip.arrival_at)} (Perú)
+                    <p className="mt-1 text-xl font-bold text-gray-800">
+                      <span className="inline-flex flex-wrap items-center justify-center gap-2">
+                        {trip.origin}
+                        <ArrowRight className="h-4 w-4 text-gray-400" />
+                        {trip.destination}
+                      </span>
                     </p>
                     <p className="mt-1 text-sm text-gray-600">
-                      Salida desde: {trip.terminalOrigin}
+                      {formatTime(`2000-01-01T${trip.departureTime}`)} -{" "}
+                      {formatTime(`2000-01-01T${trip.arrivalTime}`)}
                     </p>
-                    <p className="text-sm text-gray-600">
-                      Reservas hasta: {formatDeadline(trip.sales_closes_at)}{" "}
-                      (Perú)
-                    </p>
-                    {trip.arrivalDayOffset > 0 && (
-                      <p className="text-xs text-gray-500">
-                        Llegada{" "}
-                        {trip.arrivalDayOffset === 1
-                          ? "al día siguiente"
-                          : `${trip.arrivalDayOffset} días después`}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-                      <Clock className="w-4 h-4" />
-                      <span>{trip.service}</span>
-                      <span className="mx-1">•</span>
-                      <span>{trip.seatsAvailable} asientos</span>
-                    </div>
                   </div>
-                </div>
-
-                {/* Precio y acción */}
-                <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <p className="text-fox-pink font-bold text-2xl">
+                  <div className="text-center md:order-3 md:text-right">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Costo
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-fox-pink">
                       {formatCurrency(trip.price)}
                     </p>
-                    <p className="text-sm text-gray-600">por persona</p>
-                    <p className="mt-2 font-semibold">
-                      Total {searchData.passengers} viajero(s):{" "}
-                      {formatCurrency(trip.price * searchData.passengers)}
-                    </p>
+                    <p className="text-xs text-gray-500">por persona</p>
                   </div>
+                </div>
+                <div className="mt-5">
                   <button
                     onClick={() => handleSelect(trip)}
-                    className="flex items-center gap-2 px-6 py-3 bg-fox-pink text-white rounded-xl font-semibold hover:bg-fox-pink-dark transition"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-fox-pink px-6 py-3 font-semibold text-white transition hover:bg-fox-pink-dark"
                   >
-                    <Users className="w-4 h-4" />
-                    Seleccionar
+                    <Bus className="w-4 h-4" />
+                    Ver asientos
                   </button>
                 </div>
-                <details className="w-full text-left md:basis-full">
-                  <summary className="cursor-pointer py-3 font-semibold text-fox-pink">
-                    Ver servicio, equipaje y condiciones
-                  </summary>
-                  <ServiceDetails trip={trip} policy={policy} />
-                </details>
               </div>
             ))}
           </div>

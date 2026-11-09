@@ -7,7 +7,7 @@ El grupo eligió primero un [piloto sin cobros reales](PILOTO_SIN_COBROS.md), se
 | Punto | Implementado | Activación/validación externa pendiente |
 | --- | --- | --- |
 | Salidas | Calendario explícito, bloqueo de fechas pasadas y cierre anticipado | Cargar salidas, terminales, tarifas y vehículos reales |
-| Plazos | 10 minutos y 2 horas; se respeta el margen de abordaje | El operador debe aprobar el cierre anticipado propuesto |
+| Plazos | 2 minutos y 3 minutos; se respeta el margen de abordaje | El operador debe aprobar el cierre anticipado propuesto |
 | Dinero | Ledger de eventos, firma HMAC, idempotencia, conciliación tardía y devoluciones trazables | Contratar/configurar pasarela, verificar el adaptador y conciliación bancaria |
 | Viajeros | Comprador separado, un viajero por asiento, DNI/CE/pasaporte y responsable de menores | Verificar documentos y condiciones de viaje |
 | Acceso | Cuentas, cookies, contraseñas scrypt, roles del servidor y recuperación de un solo uso | Administrar personal, validar identidad y política de sesión |
@@ -33,8 +33,8 @@ El grupo eligió primero un [piloto sin cobros reales](PILOTO_SIN_COBROS.md), se
 ## Casos de aceptación
 
 - Reserva desde web y venta de caja simultánea del mismo asiento: una única adjudicación.
-- Confirmación a los 10 minutos exactos: rechazo y liberación.
-- Reserva sin pago a las 2 horas exactas: cancelación, liberación y registro.
+- Confirmación a los 2 minutos exactos: rechazo y liberación.
+- Reserva sin pago a los 3 minutos exactos: cancelación, liberación y registro.
 - Pago capturado dentro del plazo con aviso tardío: emisión segura o caso financiero; ningún comprobante desaparece.
 - Doble notificación: sin nuevo cobro ni boleto adicional.
 - Cambio de bus: remapeo completo y mensaje; no duplicación ni pérdida de viajeros.

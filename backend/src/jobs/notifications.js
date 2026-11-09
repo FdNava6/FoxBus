@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { iso } from "../domain.js";
 export async function deliverNotifications(
   store,
@@ -23,6 +22,13 @@ export async function deliverNotifications(
       .run(iso(store.clock() + 60000), row.id, iso(store.clock()));
     if (!claim.changes) continue;
     try {
+      const payload = {
+        id: row.id,
+        to: row.recipient,
+        subject: row.subject,
+        text: row.body,
+      };
+      if (row.html) payload.html = row.html;
       const response = await fetchImpl(endpoint, {
         method: "POST",
         headers: {
@@ -30,12 +36,7 @@ export async function deliverNotifications(
           Authorization: "Bearer " + apiKey,
           "Idempotency-Key": row.id,
         },
-        body: JSON.stringify({
-          id: row.id,
-          to: row.recipient,
-          subject: row.subject,
-          text: row.body,
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) throw new Error("mail_provider_" + response.status);
@@ -59,7 +60,7 @@ export async function deliverNotifications(
   }
   store.db
     .prepare(
-      "INSERT INTO job_health VALUES ('notifications',?,NULL) ON CONFLICT(name) DO UPDATE SET last_success_at=excluded.last_success_at,last_error=NULL",
+      "INSERT INTO job_health VALUES ('notifications',?,NULL) ON DUPLICATE KEY UPDATE last_success_at=VALUES(last_success_at),last_error=NULL",
     )
     .run(iso(store.clock()));
   return { configured: true, delivered };
@@ -74,7 +75,7 @@ export function startNotificationJob(store, options = {}) {
     } catch {
       store.db
         .prepare(
-          "INSERT INTO job_health VALUES ('notifications',NULL,'notification_job_failed') ON CONFLICT(name) DO UPDATE SET last_error=excluded.last_error",
+          "INSERT INTO job_health VALUES ('notifications',NULL,'notification_job_failed') ON DUPLICATE KEY UPDATE last_error=VALUES(last_error)",
         )
         .run();
     } finally {

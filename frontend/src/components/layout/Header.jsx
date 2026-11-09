@@ -23,11 +23,13 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "../../store/useAuthStore";
 import { ROUTES } from "../../utils/constants";
+import ThemeToggle from "../common/ThemeToggle";
 import FOXLogo from "../../assets/SinFondo.png";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { isAuthenticated, isAdmin, user, logout } = useAuthStore();
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "Usuario";
 
   const handleLogout = async () => {
     await logout();
@@ -85,8 +87,11 @@ export default function Header() {
                   Panel admin
                 </Link>
               )}
-              <span className="text-sm font-medium text-gray-700">
-                {user?.name || "Usuario"}
+              <span
+                className="text-sm font-medium text-gray-700"
+                title={user?.name}
+              >
+                {firstName}
               </span>
               <button
                 onClick={handleLogout}
@@ -107,15 +112,22 @@ export default function Header() {
           )}
         </nav>
 
-        {/* Hamburguesa: abre el menú lateral derecho en móvil */}
-        <button
-          onClick={() => setMenuOpen(!menuOpen)}
-          className="text-gray-700 md:hidden"
-          aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
-          aria-expanded={menuOpen}
-        >
-          {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          {/* Hamburguesa: abre el menú lateral derecho en móvil */}
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="text-gray-700 md:hidden"
+            aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Menú lateral derecho (solo móvil) */}
@@ -187,8 +199,11 @@ export default function Header() {
                   {isAuthenticated ? (
                     <>
                       <div className="px-2 py-3">
-                        <p className="text-sm font-medium text-gray-800">
-                          {user?.name || "Usuario"}
+                        <p
+                          className="text-sm font-medium text-gray-800"
+                          title={user?.name}
+                        >
+                          {firstName}
                         </p>
                         <p className="text-xs text-gray-400">
                           {isAdmin ? "Administrador" : "Pasajero"}

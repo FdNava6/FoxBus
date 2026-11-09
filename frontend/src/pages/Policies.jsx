@@ -27,10 +27,10 @@ export default function Policies() {
             )}
             <h2 className="font-bold">Reserva y pago</h2>
             <p>
-              Dispones de 10 minutos para seleccionar asientos y confirmar. La
-              reserva confirmada tiene 2 horas para registrar el pago. La venta
-              se cierra con anticipación para que ese plazo termine antes del
-              abordaje. El vencimiento sin pago libera los asientos.
+              Dispones de 2 minutos para seleccionar asientos y confirmar. La
+              reserva confirmada tiene 3 minutos para registrar el pago. La
+              venta se cierra con anticipación para que ese plazo termine antes
+              del abordaje. El vencimiento sin pago libera los asientos.
             </p>
             <p>
               Un pago pendiente de revisión no equivale a un boleto emitido. Las

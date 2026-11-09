@@ -12,7 +12,7 @@ export function startExpirationJob(
     } catch (error) {
       store.db
         .prepare(
-          "INSERT INTO job_health VALUES ('expiration',NULL,?) ON CONFLICT(name) DO UPDATE SET last_error=excluded.last_error",
+          "INSERT INTO job_health VALUES ('expiration',NULL,?) ON DUPLICATE KEY UPDATE last_error=VALUES(last_error)",
         )
         .run("expiration_failed");
       onError(error);
@@ -28,7 +28,7 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const store = new BookingStore(
-    process.env.DATABASE_PATH || "./data/foxbus.sqlite",
+    process.env.MYSQL_DATABASE || "foxbus",
   );
   try {
     console.log(JSON.stringify(store.runExpiration()));

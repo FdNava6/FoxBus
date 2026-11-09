@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, join, sep } from "node:path";
-import { backup } from "node:sqlite";
 import { OperationsStore } from "../src/operations-store.js";
 import { AuthStore } from "../src/auth.js";
 import { createApi } from "../src/server.js";
@@ -15,6 +14,12 @@ import {
 } from "../src/runtime-config.js";
 import { deliverNotifications } from "../src/jobs/notifications.js";
 import { hostedCheckout } from "../src/passenger-experience.js";
+import {
+  dumpDatabase,
+  serializeDump,
+  parseDump,
+  restoreDatabase,
+} from "../src/backup-dump.js";
 import {
   ownerHash,
   SESSION_DURATION_MS,
@@ -32,10 +37,7 @@ test("piloto obliga a simulación y loopback; rechaza proveedores sin revelar se
   assert.equal(config.demoPayments, true);
   assert.equal(config.devMailbox, true);
   assert.equal(config.seedDemoData, true);
-  assert.match(
-    config.databasePath.replaceAll("\\", "/"),
-    /data\/pilot\/foxbus.sqlite$/,
-  );
+  assert.equal(config.mysql.database, "foxbus_pilot");
   for (const key of [
     "PAYMENT_WEBHOOK_SECRET",
     "PAYMENT_CHECKOUT_URL",
@@ -81,7 +83,7 @@ test("marca persistente impide convertir piloto en ventas reales", (t) => {
     );
   assert.equal(
     store.db
-      .prepare("SELECT value FROM operator_settings WHERE key='runtime_mode'")
+      .prepare("SELECT value FROM operator_settings WHERE `key`='runtime_mode'")
       .get().value,
     "pilot",
   );
@@ -104,7 +106,7 @@ test("piloto rechaza una base existente con usuarios y la conserva", (t) => {
   assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM users").get().n, 1);
   assert.equal(
     store.db
-      .prepare("SELECT value FROM operator_settings WHERE key='runtime_mode'")
+      .prepare("SELECT value FROM operator_settings WHERE `key`='runtime_mode'")
       .get(),
     undefined,
   );
@@ -115,21 +117,22 @@ test("respaldo restaurado conserva marca y bloqueos del piloto sin depender del 
     source = new OperationsStore(":memory:");
   let restored;
   t.after(() => {
-    restored?.close();
-    source.close();
+    try {
+      restored?.db.dropDatabase();
+    } finally {
+      restored?.close();
+      source.close();
+    }
     assert.ok(resolve(folder).startsWith(resolve(tmpdir()) + sep));
     rmSync(folder, { recursive: true, force: true });
   });
   bindDatabaseMode(source, "pilot");
   source.seedDemoSchedule("2026-10-20", 2);
-  const path = join(folder, "restored-pilot.sqlite");
-  await backup(source.db, path);
-  restored = new OperationsStore(path);
-  assert.equal(restored.pilotMode, true);
-  assert.equal(
-    Object.values(restored.db.prepare("PRAGMA integrity_check").get())[0],
-    "ok",
-  );
+  const dump = parseDump(serializeDump(dumpDatabase(source.db)));
+  restored = new OperationsStore(join(folder, "restored-pilot"));
+  restoreDatabase(dump, restored.db);
+  assert.equal(restored.refreshPilotMode(), true);
+  assert.equal(restored.integrity(), "ok");
   assert.equal(
     restored.db.prepare("SELECT COUNT(*) AS n FROM departures").get().n,
     2 * restored.db.prepare("SELECT COUNT(*) AS n FROM trips").get().n,
@@ -493,7 +496,7 @@ test("defensa de dominio impide pagos y checkout reales en una base piloto", asy
     (e) => e.code === "PILOT_REAL_PAYMENTS_DISABLED",
   );
 });
-test("piloto conserva límites exactos de 10 minutos y 2 horas e informa sin datos personales", async (t) => {
+test("piloto conserva límites exactos de 2 minutos y 3 minutos e informa sin datos personales", async (t) => {
   const { store, request, start, pending, advance, login } = await setup(t);
   const first = await start();
   advance(SESSION_DURATION_MS);

@@ -26,6 +26,7 @@ import { MotionConfig } from "framer-motion";
 import PublicLayout from "./components/layout/PublicLayout";
 import AdminLayout from "./components/layout/AdminLayout";
 import RequireAdmin from "./components/auth/RequireAdmin";
+import RequireAuth from "./components/auth/RequireAuth";
 import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -41,6 +42,7 @@ const Help = lazy(() => import("./pages/Help"));
 const Preferences = lazy(() => import("./pages/Preferences"));
 const PilotGuide = lazy(() => import("./pages/PilotGuide"));
 import { useAuthStore } from "./store/useAuthStore";
+import { useThemeStore } from "./store/useThemeStore";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import ScrollToTop from "./components/common/ScrollToTop";
 
@@ -54,6 +56,7 @@ function OperationsRoute() {
 function App() {
   useEffect(() => {
     void useAuthStore.getState().bootstrap();
+    useThemeStore.getState().init();
   }, []);
   return (
     <ErrorBoundary>
@@ -79,10 +82,38 @@ function App() {
                   path="/buscar"
                   element={<Navigate replace to="/resultados" />}
                 />
-                <Route path="/asientos" element={<SeatSelection />} />
-                <Route path="/checkout" element={<Checkout />} />
-                <Route path="/mis-viajes" element={<MyTrips />} />
-                <Route path="/preferencias" element={<Preferences />} />
+                <Route
+                  path="/asientos"
+                  element={
+                    <RequireAuth>
+                      <SeatSelection />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/checkout"
+                  element={
+                    <RequireAuth>
+                      <Checkout />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/mis-viajes"
+                  element={
+                    <RequireAuth>
+                      <MyTrips />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/preferencias"
+                  element={
+                    <RequireAuth>
+                      <Preferences />
+                    </RequireAuth>
+                  }
+                />
                 <Route path="/recuperar" element={<Recovery />} />
                 <Route path="/condiciones" element={<Policies />} />
                 <Route path="/boletos/:code" element={<TicketPage />} />

@@ -27,7 +27,7 @@ function setup(t, path = ":memory:") {
   store.seedDemoSchedule("2026-10-20", 5);
   store.db
     .prepare(
-      "INSERT OR IGNORE INTO users(id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
+      "INSERT IGNORE INTO users(id,name,email,password_hash,role,created_at) VALUES (?,?,?,?,?,?)",
     )
     .run(
       actor.id,
@@ -152,7 +152,7 @@ test("ruta y tarifa requieren publicación; bloquea asientos dañados y solapami
   );
   assert.equal(store.getReservation(reservation.code, alice).price, 125);
 });
-test("10 minutos exactos, recarga y selección no extienden la sesión", (t) => {
+test("2 minutos exactos, recarga y selección no extienden la sesión", (t) => {
   const { store, start, advance, data } = setup(t),
     key = randomUUID(),
     r = start(alice, 1, "2026-10-21", 1, key);
@@ -167,7 +167,7 @@ test("10 minutos exactos, recarga y selección no extienden la sesión", (t) => 
   assert.equal(store.getReservation(r.code, alice).status, "expired");
   assert.deepEqual(store.getSeats(1, r.date), []);
 });
-test("confirmación fija 2 horas nuevas; repetición no extiende y no paga", (t) => {
+test("confirmación fija 3 minutos nuevos; repetición no extiende y no paga", (t) => {
   const { store, start, advance, data } = setup(t),
     r = start();
   store.selectSeats(r.code, alice, ["1A"]);
@@ -354,12 +354,24 @@ test("un viajero por asiento; admite DNI, CE, pasaporte y valida responsable de 
   assert.equal(result.travelers.length, 2);
   assert.equal(result.travelers[1].documentType, "PASSPORT");
 });
-test("limita pasajeros y reservas activas; no puede retener 40 asientos", (t) => {
+test("la cantidad se define por asientos; limita a 6 y controla reservas activas", (t) => {
   const { store, start } = setup(t);
   expectCode(() => start(alice, 40), "INVALID_PASSENGERS");
   const r = start();
+  const selected = store.selectSeats(r.code, alice, ["1A", "1B"]);
+  assert.equal(selected.passengerCount, 2);
+  assert.equal(selected.price, 170);
   expectCode(
-    () => store.selectSeats(r.code, alice, ["1A", "1B"]),
+    () =>
+      store.selectSeats(r.code, alice, [
+        "1A",
+        "1B",
+        "1C",
+        "1D",
+        "2A",
+        "2B",
+        "2C",
+      ]),
     "INVALID_SEATS",
   );
   start();
@@ -367,6 +379,27 @@ test("limita pasajeros y reservas activas; no puede retener 40 asientos", (t) =>
   expectCode(() => start(), "RESERVATION_LIMIT");
   store.cancel(r.code, alice);
   assert.equal(start().status, "active_session");
+});
+test("la reserva adopta la cantidad de asientos elegidos", (t) => {
+  const { store, start, data } = setup(t),
+    r = start(alice, 1);
+  const selected = store.selectSeats(r.code, alice, ["1A", "1B", "1C"]);
+  assert.equal(selected.passengerCount, 3);
+  assert.equal(selected.price, 255);
+  const result = store.confirm(
+    r.code,
+    alice,
+    data(["1A", "1B", "1C"]),
+  );
+  assert.equal(result.passengerCount, 3);
+  assert.equal(result.travelers.length, 3);
+});
+test("permite limpiar la selección y exige al menos un asiento al confirmar", (t) => {
+  const { store, start, data } = setup(t),
+    r = start();
+  store.selectSeats(r.code, alice, ["1A", "1B"]);
+  assert.deepEqual(store.selectSeats(r.code, alice, []).seats, []);
+  expectCode(() => store.confirm(r.code, alice, data([])), "SEATS_REQUIRED");
 });
 test("web y caja usan el mismo inventario; fallo conserva selección previa", (t) => {
   const { store, start } = setup(t),
@@ -610,9 +643,9 @@ test("cola de correo reintenta fallos y no envía sin configuración", async (t)
     "delivered",
   );
 });
-test("SQLite conserva datos y aplica migraciones una sola vez tras reinicio", (t) => {
+test("MySQL conserva datos y aplica migraciones una sola vez tras reinicio", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "foxbus-ops-")),
-    path = join(dir, "db.sqlite");
+    path = join(dir, "db");
   let now = Date.parse("2026-10-20T12:00:00Z");
   const first = new OperationsStore(path, { clock: () => now });
   first.seedDemoSchedule("2026-10-20", 3);
@@ -647,7 +680,7 @@ test("SQLite conserva datos y aplica migraciones una sola vez tras reinicio", (t
   assert.equal(second.runExpiration().cancelledUnpaid, 1);
   assert.equal(
     second.db.prepare("SELECT COUNT(*) AS n FROM schema_migrations").get().n,
-    5,
+    2,
   );
   assert.deepEqual(second.getSeats(1, "2026-10-21"), []);
 });

@@ -13,7 +13,6 @@ export default function SearchBox({ initial }) {
         origin: "Lima",
         destination: "Trujillo",
         date: limaToday(),
-        passengers: 1,
       },
   );
   useEffect(() => {
@@ -37,7 +36,7 @@ export default function SearchBox({ initial }) {
           {error}
         </p>
       )}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4">
         <div>
           <label htmlFor="origin" className="mb-1 block text-sm">
             Origen
@@ -92,25 +91,6 @@ export default function SearchBox({ initial }) {
             onChange={(e) => setForm({ ...form, date: e.target.value })}
           />
         </div>
-        <div>
-          <label htmlFor="passengers" className="mb-1 block text-sm">
-            Pasajeros
-          </label>
-          <select
-            id="passengers"
-            className="input"
-            value={form.passengers}
-            onChange={(e) =>
-              setForm({ ...form, passengers: Number(e.target.value) })
-            }
-          >
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
         <button
           className="self-end rounded-xl bg-fox-pink px-5 py-3 font-bold text-white"
           disabled={!routes.length}
@@ -118,6 +98,10 @@ export default function SearchBox({ initial }) {
           Buscar viajes
         </button>
       </div>
+      <p className="mt-3 text-sm text-gray-600">
+        Puedes comprar hasta 5 pasajes por operación. Elegirás asientos y datos
+        de cada pasajero después.
+      </p>
       {!routes.length && !error && (
         <p className="mt-3 text-sm">No hay rutas programadas publicadas.</p>
       )}

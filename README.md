@@ -28,8 +28,8 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 
 - ruta piloto Lima–Trujillo;
 - buscador, resultados y selección de asiento;
-- sesión de selección y datos de 10 minutos, con retención de asientos;
-- confirmación sin pago y plazo de 2 horas para pagar o cancelar;
+- sesión de selección y datos de 2 minutos, con retención de asientos;
+- confirmación sin pago y plazo de 3 minutos para pagar o cancelar;
 - consulta de reservas persistentes y liberación automática por vencimiento;
 - pago demo optativo y claramente identificado;
 - comprador separado de viajeros, mapas por vehículo y calendario explícito;
@@ -53,7 +53,7 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 | Módulo | Estado |
 | --- | --- |
 | Landing y buscador | Prototipo funcional |
-| Resultados y asientos | API con duración, inventario por fecha y retenciones en SQLite |
+| Resultados y asientos | API con duración, inventario por fecha y retenciones en MySQL 8 |
 | Checkout | Confirmación persistente y plazo de pago; no procesa cobros bancarios |
 | Mis viajes | Estados, límite de pago, cancelación y pago demo optativo |
 | FoxBot | Información del operador sin ofertas ni franquicias inventadas |
@@ -71,11 +71,11 @@ La diferenciación propuesta es la continuidad digital del pasaje durante todo e
 - Axios
 - Recharts
 - Framer Motion
-- Node.js 24 LTS, HTTP y SQLite
+- Node.js 24 LTS, HTTP y MySQL 8
 
 ## Ejecución local
 
-Para una prueba con el grupo **sin cobros ni correos reales**, usar [el piloto aislado](docs/PILOTO_SIN_COBROS.md): `npm run pilot` desde backend y `npm run dev` desde frontend. Se conserva la base anterior; el piloto tiene su propia base, bloquea proveedores externos e identifica los boletos como documentos sin validez para viajar. La guía está en `/piloto`.
+Para una prueba con el grupo **sin cobros ni correos reales**, usar [el piloto aislado](docs/PILOTO_SIN_COBROS.md): `npm run pilot` desde backend y `npm run dev` desde frontend. Se conserva la base de ventas `foxbus`; el piloto usa la base MySQL `foxbus_pilot`, bloquea proveedores externos e identifica los boletos como documentos sin validez para viajar. La guía está en `/piloto`.
 
 ```bash
 cd frontend

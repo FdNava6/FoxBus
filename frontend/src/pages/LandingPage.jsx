@@ -93,7 +93,7 @@ export default function LandingPage() {
                 key={o.id}
                 className="w-72 shrink-0 snap-start sm:w-80"
               >
-                <PersonalizedOfferCard offer={o} />
+                <PersonalizedOfferCard offer={o} preferences={offers.preferences} />
               </li>
             ))}
           </OfferCarousel>

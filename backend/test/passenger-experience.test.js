@@ -246,8 +246,8 @@ test("políticas publicadas fijan plazo de respuesta; estimar devolución no inv
 });
 test("FoxBot guía compra y pago con acciones, y otras fechas salen del calendario real", (t) => {
   const { store } = setup(t);
-  assert.match(store.chatbot("¿Cómo compro un pasaje?").message, /10 minutos/);
-  assert.match(store.chatbot("¿Cómo compro un pasaje?").message, /2 horas/);
+  assert.match(store.chatbot("¿Cómo compro un pasaje?").message, /2 minutos/);
+  assert.match(store.chatbot("¿Cómo compro un pasaje?").message, /3 minutos/);
   assert.equal(store.chatbot("¿Cómo pago?").actions[0].to, "/mis-viajes");
   assert.equal(store.chatbot("Perdí mi código").actions[0].to, "/recuperar");
   assert.equal(

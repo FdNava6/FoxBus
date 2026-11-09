@@ -1,225 +1,247 @@
-    // ============================================
-// Métricas (Dashboard) - página /admin
-// Página principal del panel, llega ya envuelta
-// por el AdminLayout (definido en App.jsx).
-// Solo muestra métricas: KPIs (tarjetas), gráficos
-// de ventas con Recharts y alertas + estado de la
-// flota, todos con datos simulados. Las reservas
-// se gestionan en su propia sección (/admin/reservas).
-// ============================================
-    import { 
-    DollarSign, 
-    Ticket, 
-    Users, 
-    TrendingUp, 
-    Download,
-    Bell
-    } from 'lucide-react';
-    import { LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-    import DemoBanner from '../../components/common/DemoBanner';
+import { useEffect, useState } from "react";
+import {
+  DollarSign,
+  Ticket,
+  Users,
+  TrendingUp,
+  Bell,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+import { operationsService } from "../../services/operationsService";
+import { bookingErrorMessage } from "../../services/reservationService";
 
-    const salesData = [
-    { date: '22 Ago', value: 10000 },
-    { date: '23 Ago', value: 14000 },
-    { date: '24 Ago', value: 11500 },
-    { date: '25 Ago', value: 15000 },
-    { date: '26 Ago', value: 14500 },
-    { date: '27 Ago', value: 18000 },
-    { date: '28 Ago', value: 18450 },
-    ];
+export default function Dashboard() {
+  const [metrics, setMetrics] = useState(null);
+  const [error, setError] = useState("");
 
-    const destinationData = [
-    { name: 'Lima - Trujillo', value: 32, color: '#EF4593' },
-    { name: 'Lima - Chiclayo', value: 24, color: '#9333EA' },
-    { name: 'Lima - Piura', value: 18, color: '#3B82F6' },
-    { name: 'Lima - Chimbote', value: 14, color: '#10B981' },
-    { name: 'Lima - Cajamarca', value: 12, color: '#F59E0B' },
-    ];
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      operationsService
+        .metrics()
+        .then((d) => {
+          if (active) setMetrics(d);
+        })
+        .catch((e) => {
+          if (active) setError(bookingErrorMessage(e));
+        });
+    load();
+    const t = setInterval(load, 15000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, []);
 
-    const alerts = [
-    {
-        type: 'high-occupancy',
-        title: 'Ocupación alta',
-        message: 'Ocupación alta en viaje Lima → Trujillo 22:00. Sugerencia: Añadir bus extra.',
-        route: 'Lima → Trujillo 22:00'
-    },
-    {
-        type: 'pending-payment',
-        title: 'Pago pendiente',
-        message: 'Pago pendiente por confirmar. Reserva BS-82928 (Ana Torres).',
-        reservation: 'BS-82928'
-    },
-    {
-        type: 'new-question',
-        title: 'Nueva sugerencia',
-        message: 'Hay 15 preguntas nuevas sin respuesta en FoxBot.',
-    }
-    ];
+  if (error)
+    return (
+      <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+        {error}
+      </p>
+    );
+  if (!metrics) return <p>Cargando métricas reales…</p>;
 
-    export default function Dashboard() {
+  const salesData = metrics.last7Days || [];
+  const destinationData = metrics.destinations || [];
+  const alerts = metrics.alerts || [];
+  const fleet = metrics.fleet || { total: 0, onRoute: 0, atTerminal: 0 };
+  const pct = (a, b) =>
+    b ? `${(((a - b) / b) * 100).toFixed(1)}% vs ayer` : "Sin datos previos";
+
   return (
     <>
-      <DemoBanner className="mb-6" />
-
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-            <div>
-            <h1 className="text-2xl font-display font-bold text-gray-800">
-                Resumen general de la operación
-            </h1>
-            <p className="text-gray-500">Escenario de referencia · 28 Ago 2026</p>
-            </div>
-<button
-            className="flex items-center gap-2 rounded-lg bg-fox-pink px-4 py-2 text-white transition hover:bg-fox-pink-dark"
-            aria-label="Descargar reporte (disponible en la siguiente iteración)"
-          >
-            <Download className="w-5 h-5" />
-            Descargar reporte
-          </button>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-gray-800">
+            Resumen de la operación
+          </h1>
+          <p className="text-gray-500">
+            Datos reales de reservas generadas por usuarios · {metrics.today}
+          </p>
         </div>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatCard
-            title="Ventas de hoy"
-            value="S/ 18,450"
-            change="+12.5% vs ayer"
-            positive={true}
-            icon={<DollarSign className="w-6 h-6" />}
-            color="pink"
-            />
-            <StatCard
-            title="Reservas hoy"
-            value="256"
-            change="+8.3% vs ayer"
-            positive={true}
-            icon={<Ticket className="w-6 h-6" />}
-            color="purple"
-            />
-            <StatCard
-            title="Pasajeros hoy"
-            value="1,024"
-            change="+9.7% vs ayer"
-            positive={true}
-            icon={<Users className="w-6 h-6" />}
-            color="blue"
-            />
-            <StatCard
-            title="Ocupación promedio"
-            value="84%"
-            change="+4.2% vs ayer"
-            positive={true}
-            icon={<TrendingUp className="w-6 h-6" />}
-            color="green"
-            />
-        </div>
+      <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Ventas de hoy"
+          value={`S/ ${Number(metrics.salesToday || 0).toFixed(2)}`}
+          change={pct(metrics.salesToday, metrics.yesterday?.sales)}
+          positive={(metrics.salesToday || 0) >= (metrics.yesterday?.sales || 0)}
+          icon={<DollarSign className="h-6 w-6" />}
+          color="pink"
+        />
+        <StatCard
+          title="Reservas hoy"
+          value={String(metrics.reservationsToday || 0)}
+          change={pct(
+            metrics.reservationsToday,
+            metrics.yesterday?.reservations,
+          )}
+          positive={
+            (metrics.reservationsToday || 0) >=
+            (metrics.yesterday?.reservations || 0)
+          }
+          icon={<Ticket className="h-6 w-6" />}
+          color="purple"
+        />
+        <StatCard
+          title="Pasajeros hoy"
+          value={String(metrics.passengersToday || 0)}
+          change="Reservas pagadas (hoy)"
+          positive={true}
+          icon={<Users className="h-6 w-6" />}
+          color="blue"
+        />
+        <StatCard
+          title="Ocupación hoy"
+          value={`${metrics.occupancy || 0}%`}
+          change={`${metrics.soldSeats || 0} / ${metrics.totalSeats || 0} asientos`}
+          positive={true}
+          icon={<TrendingUp className="h-6 w-6" />}
+          color="green"
+        />
+      </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Sales Chart */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm">
-            <h3 className="font-display font-semibold text-gray-800 mb-4">
-                Ventas de los últimos 7 días
-            </h3>
+      <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="mb-4 font-display font-semibold text-gray-800">
+            Ventas pagadas (últimos 7 días)
+          </h3>
+          {salesData.some((d) => d.value > 0) ? (
             <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={salesData}>
+              <LineChart data={salesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="date" stroke="#6B7280" />
-                <YAxis stroke="#6B7280" tickFormatter={(value) => `S/ ${value/1000}k`} />
-                <Tooltip 
-                    formatter={(value) => [`S/ ${value.toLocaleString()}`, 'Ventas']}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                <XAxis dataKey="label" stroke="#6B7280" />
+                <YAxis
+                  stroke="#6B7280"
+                  tickFormatter={(value) => `S/ ${value}`}
                 />
-                <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#FF4C9C" 
-                    strokeWidth={3}
-                    dot={{ fill: '#FF4C9C', r: 6 }}
-                    activeDot={{ r: 8 }}
+                <Tooltip
+                  formatter={(value) => [
+                    `S/ ${Number(value).toLocaleString()}`,
+                    "Ventas",
+                  ]}
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  }}
                 />
-                </LineChart>
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#FF4C9C"
+                  strokeWidth={3}
+                  dot={{ fill: "#FF4C9C", r: 6 }}
+                  activeDot={{ r: 8 }}
+                />
+              </LineChart>
             </ResponsiveContainer>
-            </div>
+          ) : (
+            <p className="py-16 text-center text-gray-500">
+              Aún no hay ventas pagadas registradas por usuarios.
+            </p>
+          )}
+        </div>
 
-            {/* Destination Chart */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm">
-            <h3 className="font-display font-semibold text-gray-800 mb-4">
-                Ventas por destino (Top 5)
-            </h3>
-            <div className="flex gap-6">
-                <ResponsiveContainer width="50%" height={300}>
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <h3 className="mb-4 font-display font-semibold text-gray-800">
+            Ventas por destino (reservas pagadas)
+          </h3>
+          {destinationData.length ? (
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                    <Pie
+                  <Pie
                     data={destinationData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius={55}
+                    outerRadius={90}
                     paddingAngle={5}
                     dataKey="value"
-                    >
+                    nameKey="name"
+                  >
                     {destinationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
-                    </Pie>
-                    <Tooltip />
+                  </Pie>
+                  <Tooltip />
                 </PieChart>
-                </ResponsiveContainer>
-                <div className="flex-1 space-y-3">
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-2">
                 {destinationData.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-sm text-gray-600 flex-1">{item.name}</span>
-                    <span className="text-sm font-semibold text-gray-800">{item.value}%</span>
-                    </div>
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <div
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="flex-1 text-gray-600">{item.name}</span>
+                    <span className="font-semibold text-gray-800">
+                      {item.value}%
+                    </span>
+                  </div>
                 ))}
-                <div className="pt-3 border-t">
-                    <p className="text-sm font-semibold text-gray-800">
-                    Total: S/ 18,450
-                    </p>
+                <div className="border-t pt-2 text-sm font-semibold text-gray-800">
+                  Total: S/ {Number(metrics.totalSales || 0).toFixed(2)}
                 </div>
-                </div>
+              </div>
             </div>
-            </div>
+          ) : (
+            <p className="py-16 text-center text-gray-500">
+              Aún no hay destinos con reservas pagadas.
+            </p>
+          )}
         </div>
+      </div>
 
-        {/* Alertas y estado de la flota */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Alerts */}
-            <div className="space-y-4 lg:col-span-2">
-            <h3 className="font-display font-semibold text-gray-800 flex items-center gap-2">
-                <Bell className="w-5 h-5 text-fox-pink" />
-                Alertas inteligentes
-            </h3>
-
-            {alerts.map((alert, idx) => (
-                <AlertCard key={idx} alert={alert} />
-            ))}
-            </div>
-
-            {/* Buses en operación */}
-            <div className="space-y-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm">
-                <h4 className="font-semibold text-gray-800 mb-4">Buses en operación hoy</h4>
-                <div className="text-4xl font-bold text-gray-800 mb-2">52</div>
-                <p className="text-sm text-gray-500 mb-4">buses activos</p>
-                <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">En ruta</span>
-                    <span className="font-medium text-gray-800">48 (92%)</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">En terminal</span>
-                    <span className="font-medium text-gray-800">4 (8%)</span>
-                </div>
-                </div>
-                <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div className="h-full bg-fox-pink w-[92%]" />
-                </div>
-            </div>
-            </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <h3 className="flex items-center gap-2 font-display font-semibold text-gray-800">
+            <Bell className="h-5 w-5 text-fox-pink" />
+            Alertas
+          </h3>
+          {alerts.length ? (
+            alerts.map((alert, idx) => <AlertCard key={idx} alert={alert} />)
+          ) : (
+            <p className="rounded-xl border bg-white p-4 text-sm text-gray-500">
+              Sin alertas pendientes.
+            </p>
+          )}
         </div>
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <h4 className="mb-4 font-semibold text-gray-800">
+            Salidas programadas hoy
+          </h4>
+          <div className="mb-2 text-4xl font-bold text-gray-800">
+            {fleet.total}
+          </div>
+          <p className="mb-4 text-sm text-gray-500">salidas (no demo)</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Realizadas</span>
+              <span className="font-medium text-gray-800">{fleet.onRoute}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Programadas</span>
+              <span className="font-medium text-gray-800">
+                {fleet.atTerminal}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

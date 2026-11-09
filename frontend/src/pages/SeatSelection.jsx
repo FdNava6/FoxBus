@@ -6,6 +6,7 @@ import {
   reservationService,
   bookingErrorMessage,
 } from "../services/reservationService";
+import { operationsService } from "../services/operationsService";
 import useBookingSession from "../hooks/useBookingSession";
 import ReservationTimer from "../components/common/ReservationTimer";
 
@@ -25,10 +26,15 @@ export default function SeatSelection() {
     expire,
   } = useBookingSession({ start: true });
   const [occupied, setOccupied] = useState([]),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [policy, setPolicy] = useState(null);
   const actual = session?.trip || trip,
     layout = actual?.seatLayout || [],
-    floors = [...new Set(layout.map((s) => s.floor))].sort();
+    floors = [...new Set(layout.map((s) => s.floor))].sort(),
+    maxSeats = Number(session?.trip?.maxSeats || policy?.maxSeats || 5);
+  useEffect(() => {
+    operationsService.policy().then(setPolicy).catch(() => {});
+  }, []);
   useEffect(() => {
     if (!trip) return;
     let active = true;
@@ -49,6 +55,7 @@ export default function SeatSelection() {
   }, [trip, setError]);
   const choose = async (id) => {
     if (!ready || saving) return;
+    if (!selected.includes(id) && selected.length >= maxSeats) return;
     const next = selected.includes(id)
       ? selected.filter((s) => s !== id)
       : [...selected, id];
@@ -99,9 +106,12 @@ export default function SeatSelection() {
       <div className="grid gap-8 lg:grid-cols-3">
         <section className="rounded-2xl bg-white p-6 lg:col-span-2">
           <h1 className="mb-2 text-xl font-bold">Selecciona tus asientos</h1>
-          <p className="mb-5">
-            Selecciona {trip?.passengerCount || 1} asiento(s), uno por viajero.
-          </p>
+            <p className="mb-5">
+              Elige los asientos que necesites (máximo {maxSeats} por compra),
+              uno por viajero.
+              {selected.length > 0 &&
+                ` Llevas ${selected.length} de ${maxSeats} seleccionados.`}
+            </p>
           {floors.map((floor) => (
             <div key={floor} className="mb-6">
               <h2 className="mb-4 text-center font-semibold">Piso {floor}</h2>
@@ -138,7 +148,7 @@ export default function SeatSelection() {
                             saving ||
                             used ||
                             (!selected.includes(seat.id) &&
-                              selected.length >= (trip?.passengerCount || 1))
+                              selected.length >= maxSeats)
                           }
                           onClick={() => choose(seat.id)}
                           className={
@@ -180,31 +190,51 @@ export default function SeatSelection() {
             disponible.
           </p>
         </section>
-        <TripSummary
-          trip={actual}
-          seats={selected}
-          passengerCount={trip?.passengerCount || 1}
-        >
-          {selected.map((id) => {
-            const info = layout.find((s) => s.id === id);
-            return (
-              <p key={id} className="text-sm">
-                Asiento {id}: {info?.category} · piso {info?.floor}
+        <div className="space-y-4">
+          <section className="h-fit rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-3 text-lg font-bold">Descripción del viaje</h2>
+            {actual?.service && (
+              <p className="font-semibold">{actual.service}</p>
+            )}
+            {actual?.serviceDescription && (
+              <p className="mt-2 text-sm">{actual.serviceDescription}</p>
+            )}
+            {actual?.features?.length > 0 && (
+              <ul className="mt-3 list-inside list-disc space-y-1 text-sm">
+                {actual.features.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            )}
+            {!actual?.serviceDescription && !actual?.features?.length && (
+              <p className="mt-2 text-sm">
+                Las características adicionales de este servicio no se han
+                publicado.
               </p>
-            );
-          })}
-          <Button
-            fullWidth
-            disabled={
-              !ready ||
-              saving ||
-              selected.length !== (trip?.passengerCount || 1)
-            }
-            onClick={() => navigate("/checkout")}
+            )}
+          </section>
+          <TripSummary
+            trip={actual}
+            seats={selected}
+            passengerCount={selected.length}
           >
-            Continuar a datos
-          </Button>
-        </TripSummary>
+            {selected.map((id) => {
+              const info = layout.find((s) => s.id === id);
+              return (
+                <p key={id} className="text-sm">
+                  Asiento {id}: {info?.category} · piso {info?.floor}
+                </p>
+              );
+            })}
+            <Button
+              fullWidth
+              disabled={!ready || saving || selected.length === 0}
+              onClick={() => navigate("/checkout")}
+            >
+              Continuar a datos
+            </Button>
+          </TripSummary>
+        </div>
       </div>
     </main>
   );

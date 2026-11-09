@@ -24,7 +24,7 @@ export class OperationsStore extends BookingStore {
     return this.transaction((now) => {
       const rows = this.db
         .prepare(
-          "SELECT * FROM reservations WHERE json_extract(passenger_json,'$.email')=? AND (?='' OR code=?) ORDER BY created_at DESC LIMIT 50",
+          "SELECT * FROM reservations WHERE JSON_UNQUOTE(JSON_EXTRACT(passenger_json,'$.email'))=? AND (?='' OR code=?) ORDER BY created_at DESC LIMIT 50",
         )
         .all(
           address,
@@ -73,7 +73,7 @@ export class OperationsStore extends BookingStore {
         for (const code of codes) {
           this.db
             .prepare(
-              "INSERT INTO reservation_grants VALUES (?,?,?) ON CONFLICT(reservation_code,owner_hash) DO UPDATE SET expires_at=excluded.expires_at",
+              "INSERT INTO reservation_grants VALUES (?,?,?) ON DUPLICATE KEY UPDATE expires_at=VALUES(expires_at)",
             )
             .run(code, owner, iso(now + 7 * 86400000));
         }
@@ -186,6 +186,110 @@ export class OperationsStore extends BookingStore {
       return this.view(this.owned(code, owner), now);
     });
   }
+  payWithMethod(code, owner, { method, details } = {}) {
+    const methods = {
+      visa: "Visa",
+      credit: "Tarjeta de crédito",
+      debit: "Tarjeta de débito",
+      yape: "Yape",
+      plin: "Plin",
+      interbank: "Interbank",
+    };
+    if (!Object.hasOwn(methods, method))
+      fail(400, "INVALID_PAYMENT_METHOD", "Elige un medio de pago válido.");
+    const data = details && typeof details === "object" ? details : {};
+    const digits = (value) => String(value || "").replace(/\D/g, "");
+    if (method === "visa" || method === "credit" || method === "debit") {
+      const number = digits(data.cardNumber);
+      const luhn = (value) => {
+        let sum = 0,
+          double = false;
+        for (let i = value.length - 1; i >= 0; i--) {
+          let n = Number(value[i]);
+          if (double) {
+            n *= 2;
+            if (n > 9) n -= 9;
+          }
+          sum += n;
+          double = !double;
+        }
+        return sum % 10 === 0;
+      };
+      if (
+        number.length < 13 ||
+        number.length > 19 ||
+        (method === "visa" && number[0] !== "4") ||
+        !luhn(number)
+      )
+        fail(
+          400,
+          "INVALID_CARD",
+          "Revisa el número de tarjeta: no cumple la validación del medio.",
+        );
+      if (
+        typeof data.holder !== "string" ||
+        data.holder.trim().length < 3 ||
+        data.holder.length > 150
+      )
+        fail(400, "INVALID_HOLDER", "Ingresa el nombre del titular.");
+      const expiry = String(data.expiry || "");
+      const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(expiry);
+      const now = new Date(this.clock());
+      if (
+        !match ||
+        Number("20" + match[2]) < now.getUTCFullYear() ||
+        (Number("20" + match[2]) === now.getUTCFullYear() &&
+          Number(match[1]) < now.getUTCMonth() + 1)
+      )
+        fail(400, "INVALID_EXPIRY", "La fecha de vencimiento no es válida.");
+      if (!/^\d{3,4}$/.test(String(data.cvv || "")))
+        fail(400, "INVALID_CVV", "Ingresa el código de seguridad.");
+    } else if (method === "yape" || method === "plin") {
+      const label = methods[method];
+      if (!/^9\d{8}$/.test(digits(data.phone)))
+        fail(
+          400,
+          "INVALID_WALLET_PHONE",
+          `Usa un celular ${label} de 9 dígitos.`,
+        );
+      if (!/^\d{6}$/.test(digits(data.code)))
+        fail(400, "INVALID_WALLET_CODE", "Ingresa el código de aprobación.");
+    } else if (method === "interbank") {
+      if (!/^\d{10,20}$/.test(digits(data.account)))
+        fail(
+          400,
+          "INVALID_INTERBANK_ACCOUNT",
+          "Ingresa una cuenta o CCI válido de Interbank.",
+        );
+      if (!/^\d{6}$/.test(digits(data.code)))
+        fail(
+          400,
+          "INVALID_INTERBANK_CODE",
+          "Ingresa el código de operación de Interbank.",
+        );
+    }
+    return this.transaction((now) => {
+      const row = this.owned(code, owner);
+      if (row.status === "paid") return this.view(row, now);
+      this.requireStatus(row, "pending_payment");
+      this.db
+        .prepare(
+          "UPDATE reservations SET payment_method=?,revision=revision+1 WHERE code=?",
+        )
+        .run(method, code);
+      const paid = this.recordPayment(code, {
+        reference: "gateway-" + method + "-" + code,
+        amountCents: row.total_cents,
+        mode: "demo",
+        owner,
+      });
+      this.audit(owner, "payment_gateway_approved", code, {
+        method,
+        label: methods[method],
+      });
+      return paid;
+    });
+  }
   staffReservations(params) {
     return this.transaction((now) =>
       params
@@ -205,7 +309,7 @@ export class OperationsStore extends BookingStore {
       ? staffList(this.db, "requests", params)
       : this.db
           .prepare(
-            "SELECT s.*,r.trip_id,r.travel_date FROM service_requests s JOIN reservations r ON r.code=s.reservation_code ORDER BY s.created_at DESC LIMIT 500",
+            "SELECT s.*,r.trip_id,r.travel_date,t.origin,t.destination FROM service_requests s JOIN reservations r ON r.code=s.reservation_code JOIN trips t ON t.id=r.trip_id ORDER BY s.created_at DESC LIMIT 500",
           )
           .all();
   }
@@ -219,14 +323,19 @@ export class OperationsStore extends BookingStore {
           .all();
   }
   reserveAtCounter(data, actor) {
+    const maxSeats = this.policy().maxSeats || 5;
     if (
       !Array.isArray(data.seats) ||
       !data.seats.length ||
-      data.seats.length > 6 ||
+      data.seats.length > maxSeats ||
       data.seats.some((seat) => typeof seat !== "string") ||
       new Set(data.seats).size !== data.seats.length
     )
-      fail(400, "INVALID_SEATS", "Selecciona de 1 a 6 asientos diferentes.");
+      fail(
+        400,
+        "INVALID_SEATS",
+        `Selecciona de 1 a ${maxSeats} asientos diferentes.`,
+      );
     const contact = contactData(data.contact),
       travelers = travelersData(data.travelers, data.seats, data.date);
     const fingerprint = (reservation) =>
@@ -483,12 +592,16 @@ export class OperationsStore extends BookingStore {
         seats: JSON.parse(v.seats_json),
       }));
   }
-  departures() {
-    return this.db
-      .prepare(
-        "SELECT d.*,t.origin,t.destination FROM departures d JOIN trips t ON t.id=d.trip_id ORDER BY departure_at",
-      )
-      .all();
+  departures({ passengerVisibleOnly = false } = {}) {
+    const filter = passengerVisibleOnly
+      ? " WHERE d.status='scheduled' AND d.departure_at>? AND d.id NOT LIKE 'demo-%'"
+      : "";
+    const sql =
+      "SELECT d.*,t.origin,t.destination FROM departures d JOIN trips t ON t.id=d.trip_id" +
+      filter +
+      " ORDER BY departure_at";
+    const stmt = this.db.prepare(sql);
+    return passengerVisibleOnly ? stmt.all(iso(this.clock())) : stmt.all();
   }
   saveVehicle({ id, label, seats }, actor) {
     if (
@@ -540,7 +653,7 @@ export class OperationsStore extends BookingStore {
     }));
     this.db
       .prepare(
-        "INSERT INTO vehicles VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,seats_json=excluded.seats_json",
+        "INSERT INTO vehicles VALUES (?,?,?) ON DUPLICATE KEY UPDATE label=VALUES(label),seats_json=VALUES(seats_json)",
       )
       .run(id, label, JSON.stringify(clean));
     this.audit(actor.id, "vehicle_saved", id);
@@ -820,6 +933,8 @@ export class OperationsStore extends BookingStore {
         "changePolicy",
         "refundPolicy",
         "serviceResponseHours",
+        "companyInfo",
+        "faqs",
       ];
     const next = { ...old, version: iso(this.clock()) };
     for (const key of allowed)
@@ -836,12 +951,26 @@ export class OperationsStore extends BookingStore {
       (next.serviceResponseHours !== null &&
         (!Number.isInteger(next.serviceResponseHours) ||
           next.serviceResponseHours < 1 ||
-          next.serviceResponseHours > 720))
+          next.serviceResponseHours > 720)) ||
+      (typeof next.companyInfo !== "string" ||
+        next.companyInfo.length > 4000) ||
+      !Array.isArray(next.faqs) ||
+      next.faqs.length > 30 ||
+      next.faqs.some(
+        (f) =>
+          !f ||
+          typeof f.question !== "string" ||
+          !f.question.trim() ||
+          f.question.length > 200 ||
+          typeof f.answer !== "string" ||
+          !f.answer.trim() ||
+          f.answer.length > 1000,
+      )
     )
       fail(
         400,
         "INVALID_POLICY",
-        "Revisa instrucciones, condiciones y tiempo de respuesta.",
+        "Revisa instrucciones, condiciones, datos de la empresa y preguntas frecuentes.",
       );
     if (
       typeof next.legalName !== "string" ||
@@ -869,7 +998,7 @@ export class OperationsStore extends BookingStore {
     )
       fail(400, "INVALID_POLICY", "Revisa las políticas del operador.");
     this.db
-      .prepare("UPDATE operator_settings SET value=? WHERE key='policy'")
+      .prepare("UPDATE operator_settings SET value=? WHERE `key`='policy'")
       .run(JSON.stringify(next));
     this.audit(actor.id, "policy_updated", "operator", {
       version: next.version,
@@ -886,7 +1015,7 @@ export class OperationsStore extends BookingStore {
       if (/pago|pagar|tarjeta|yape|plin/.test(m))
         return {
           message:
-            "Confirma tu reserva, abre Mis viajes y pulsa Confirmar pago antes de que venza el plazo de 2 horas. Luego podrás consultar el comprobante y el código QR de cada viajero.",
+            "Confirma tu reserva, abre Mis viajes y pulsa Confirmar pago antes de que venza el plazo de 3 minutos. Luego podrás consultar el comprobante y el código QR de cada viajero.",
           actions: [action("Consultar mi reserva", "/mis-viajes")],
         };
       if (/recuper|codigo|código|contrase|correo|buz[oó]n/.test(m))
@@ -907,7 +1036,7 @@ export class OperationsStore extends BookingStore {
       if (/compra|pasaje|reserva/.test(m))
         return {
           message:
-            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa los datos antes de que pasen 10 minutos. 3. Confirma tu reserva: cuentas con 2 horas para completar el pago o cancelar. 4. Consulta el comprobante y el QR en Mis viajes.",
+            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa los datos antes de que pasen 2 minutos. 3. Confirma tu reserva: cuentas con 3 minutos para completar el pago o cancelar. 4. Consulta el comprobante y el QR en Mis viajes.",
           actions: [
             action("Buscar viajes", "/resultados"),
             action("Mis viajes", "/mis-viajes"),
@@ -918,7 +1047,7 @@ export class OperationsStore extends BookingStore {
       if (/pago|pagar|tarjeta|yape|plin/.test(m))
         return {
           message:
-            "En este piloto no hay cobros, tarjetas, transferencias ni efectivo real. Confirma tu reserva, abre Mis viajes y pulsa Simular pago (sin cobro). El plazo sigue siendo 2 horas y el QR resultante es de prueba, sin validez para viajar.",
+            "En este piloto no hay cobros, tarjetas, transferencias ni efectivo real. Confirma tu reserva, abre Mis viajes y pulsa Simular pago (sin cobro). El plazo sigue siendo 3 minutos y el QR resultante es de prueba, sin validez para viajar.",
           actions: [
             action("Simular desde mi reserva", "/mis-viajes"),
             action("Ver guía del piloto", "/piloto"),
@@ -945,12 +1074,69 @@ export class OperationsStore extends BookingStore {
       if (/compra|pasaje|reserva/.test(m))
         return {
           message:
-            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa datos ficticios, con correo @example.test; tienes 10 minutos. 3. Confirma sin pagar: cuentas con 2 horas para simular pago o cancelar. 4. Guarda el comprobante y QR identificados como documentos de prueba. No hay cobros ni viajes reales.",
+            "1. Busca origen, destino, fecha y viajeros. 2. Elige asientos y completa datos ficticios, con correo @example.test; tienes 2 minutos. 3. Confirma sin pagar: cuentas con 3 minutos para simular pago o cancelar. 4. Guarda el comprobante y QR identificados como documentos de prueba. No hay cobros ni viajes reales.",
           actions: [
             action("Empezar búsqueda", "/resultados"),
             action("Ver guía del piloto", "/piloto"),
           ],
         };
+    }
+    const faqs = Array.isArray(p.faqs) ? p.faqs : [];
+    const faq = faqs.find((item) => {
+      const words = String(item.question || "")
+        .toLowerCase()
+        .split(/[^a-záéíóúñ0-9]+/)
+        .filter((word) => word.length > 4);
+      return words.length && words.some((word) => m.includes(word));
+    });
+    if (faq)
+      return {
+        message: faq.answer,
+        actions: [
+          action("Consultar condiciones", "/condiciones"),
+          action("Contactar al operador", "/ayuda"),
+        ],
+      };
+    if (
+      /empresa|compañ|compan|raz[oó]n social|ruc|qui[eé]nes somos|direcci[oó]n|contacto|tel[eé]fono|correo de soporte|horario de atenci[oó]n/.test(
+        m,
+      )
+    ) {
+      const data = [
+        p.companyInfo,
+        p.legalName && "Razón social: " + p.legalName,
+        p.taxId && "RUC: " + p.taxId,
+        p.address && "Dirección: " + p.address,
+        p.supportEmail && "Correo: " + p.supportEmail,
+        p.supportPhone && "Teléfono: " + p.supportPhone,
+        p.supportHours && "Atención: " + p.supportHours,
+      ].filter(Boolean);
+      return {
+        message: data.length
+          ? data.join("\n")
+          : "El operador aún no publicó los datos de la empresa. Puedes consultarlos en la sección de ayuda.",
+        actions: [action("Ver ayuda y contacto", "/ayuda")],
+      };
+    }
+    if (
+      /ruta|destino|horario|salida|precio|tarifa|fecha|d[oó]nde|donde|viajan|salen|llegada/.test(
+        m,
+      )
+    ) {
+      const routes = this.routes();
+      return {
+        message: routes.length
+          ? "Salidas publicadas:\n" +
+            routes
+              .slice(0, 12)
+              .map(
+                (r) =>
+                  `${r.origin}  ?  ${r.destination} · ${r.departureTime} · S/ ${(Number(r.priceCents) / 100).toFixed(2)}`,
+              )
+              .join("\n")
+          : "Aún no hay rutas publicadas. El operador las habilitará pronto.",
+        actions: [action("Buscar viajes", "/resultados")],
+      };
     }
     if (m.includes("equipaje"))
       return {
@@ -1003,13 +1189,13 @@ export class OperationsStore extends BookingStore {
     if (/horario|salida|ruta/.test(m))
       return {
         message:
-          "Elige origen, destino, fecha y cantidad de viajeros en Buscar viajes. Allí aparecen las salidas publicadas, duración y fecha estimada de llegada. Las reservas con pago diferido cierran 10 minutos + 2 horas + el margen de presentación antes de salir.",
+          "Elige origen, destino, fecha y cantidad de viajeros en Buscar viajes. Allí aparecen las salidas publicadas, duración y fecha estimada de llegada. Las reservas cierran 2 minutos + 3 minutos + el margen de presentación antes de salir.",
         actions: [action("Consultar salidas", "/resultados")],
       };
     if (/compra|pasaje|reserva/.test(m))
       return {
         message:
-          "1. Busca origen, destino, fecha y viajeros. 2. Compara el servicio y selecciona los asientos. 3. Completa comprador y viajeros; dispones de 10 minutos para confirmar. 4. Tras confirmar, tienes 2 horas para pagar por un medio publicado o cancelar. 5. Consulta Mis viajes y guarda el boleto QR cuando el pago esté verificado. Puedes reservar sin crear cuenta.",
+          "1. Busca origen, destino, fecha y viajeros. 2. Compara el servicio y selecciona los asientos. 3. Completa comprador y viajeros; dispones de 2 minutos para confirmar. 4. Tras confirmar, tienes 3 minutos para pagar por un medio publicado o cancelar. 5. Consulta Mis viajes y guarda el boleto QR cuando el pago esté verificado. Puedes reservar sin crear cuenta.",
         actions: [
           action("Empezar búsqueda", "/resultados"),
           action("Ver mis viajes", "/mis-viajes"),
@@ -1026,16 +1212,21 @@ export class OperationsStore extends BookingStore {
   }
   upcomingDates({ origin, destination, date, passengers = 1 }) {
     validateDate(date);
+    const maxSeats = this.policy().maxSeats || 5;
     if (
       !Number.isInteger(Number(passengers)) ||
       Number(passengers) < 1 ||
-      Number(passengers) > 6
+      Number(passengers) > maxSeats
     )
-      fail(400, "INVALID_PASSENGERS", "Reserva entre 1 y 6 pasajeros.");
+      fail(
+        400,
+        "INVALID_PASSENGERS",
+        `Reserva entre 1 y ${maxSeats} pasajeros por compra.`,
+      );
     return this.transaction((now) => {
       const rows = this.db
         .prepare(
-          "SELECT d.* FROM departures d JOIN trips t ON t.id=d.trip_id WHERE t.origin=? COLLATE NOCASE AND t.destination=? COLLATE NOCASE AND d.travel_date>? AND d.status='scheduled' ORDER BY d.travel_date,d.departure_at LIMIT 100",
+          "SELECT d.* FROM departures d JOIN trips t ON t.id=d.trip_id WHERE t.origin=? AND t.destination=? AND d.travel_date>? AND d.status='scheduled' ORDER BY d.travel_date,d.departure_at LIMIT 100",
         )
         .all(origin || "", destination || "", date);
       const dates = new Map();
@@ -1046,6 +1237,155 @@ export class OperationsStore extends BookingStore {
         dates.set(dep.travel_date, (dates.get(dep.travel_date) || 0) + 1);
       }
       return [...dates].slice(0, 5).map(([date, count]) => ({ date, count }));
+    });
+  }
+  metrics() {
+    return this.transaction((now) => {
+      const today = limaDate(now);
+      const palette = [
+        "#EF4593",
+        "#9333EA",
+        "#3B82F6",
+        "#10B981",
+        "#F59E0B",
+      ];
+      const paid = this.db
+        .prepare(
+          "SELECT r.code,r.total_cents,r.passenger_count,r.paid_at,r.travel_date,t.origin,t.destination FROM reservations r JOIN trips t ON t.id=r.trip_id WHERE r.status='paid'",
+        )
+        .all();
+      const inLima = (value) => (value ? limaDate(Date.parse(value)) : "");
+      const todayPaid = paid.filter((r) => inLima(r.paid_at) === today);
+      const salesToday = todayPaid.reduce(
+        (sum, r) => sum + Number(r.total_cents || 0),
+        0,
+      );
+      const passengersToday = todayPaid.reduce(
+        (sum, r) => sum + Number(r.passenger_count || 0),
+        0,
+      );
+      const reservationsToday = this.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM reservations WHERE LEFT(created_at,10)=?",
+        )
+        .get(today).count;
+      const last7Days = [];
+      for (let offset = 6; offset >= 0; offset -= 1) {
+        const date = limaDate(now - offset * 86400000);
+        last7Days.push({
+          date,
+          label: new Intl.DateTimeFormat("es-PE", {
+            day: "2-digit",
+            month: "short",
+            timeZone: "America/Lima",
+          }).format(new Date(now - offset * 86400000)),
+          value:
+            paid
+              .filter((r) => inLima(r.paid_at) === date)
+              .reduce((sum, r) => sum + Number(r.total_cents || 0), 0) / 100,
+        });
+      }
+      const byDestination = new Map();
+      for (const r of paid) {
+        const key = r.origin + " - " + r.destination;
+        byDestination.set(
+          key,
+          (byDestination.get(key) || 0) + Number(r.total_cents || 0),
+        );
+      }
+      const totalDestination = [...byDestination.values()].reduce(
+        (sum, value) => sum + value,
+        0,
+      );
+      const destinations = [...byDestination.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, value], index) => ({
+          name,
+          value: totalDestination
+            ? Math.round((value / totalDestination) * 100)
+            : 0,
+          amount: value / 100,
+          color: palette[index % palette.length],
+        }));
+      const departures = this.db
+        .prepare(
+          "SELECT id,status FROM departures WHERE travel_date=?",
+        )
+        .all(today);
+      const totalSeats = departures.length * 40;
+      const occupied = this.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM reservation_seats rs JOIN departures d ON d.trip_id=rs.trip_id AND d.travel_date=rs.travel_date WHERE rs.travel_date=? AND d.status='scheduled'",
+        )
+        .get(today).count;
+      const pendingPayments = this.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM reservations WHERE status='pending_payment'")
+        .get().count;
+      const openRequests = this.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM service_requests WHERE status IN ('open','in_review')")
+        .get().count;
+      const openFinancial = this.db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM financial_cases WHERE status!='resolved'",
+        )
+        .get().count;
+      const alerts = [];
+      if (pendingPayments)
+        alerts.push({
+          type: "pending-payment",
+          title: "Pagos pendientes",
+          message: `${pendingPayments} reserva(s) esperan confirmar su pago.`,
+        });
+      if (openRequests)
+        alerts.push({
+          type: "new-question",
+          title: "Solicitudes abiertas",
+          message: `${openRequests} solicitud(es) de pasajeros requieren atención.`,
+        });
+      if (openFinancial)
+        alerts.push({
+          type: "high-occupancy",
+          title: "Casos financieros",
+          message: `${openFinancial} caso(s) de pago o devolución siguen en seguimiento.`,
+        });
+      return {
+        today,
+        salesToday: salesToday / 100,
+        reservationsToday,
+        passengersToday,
+        occupancy: totalSeats
+          ? Math.round((occupied / totalSeats) * 100)
+          : 0,
+        soldSeats: occupied,
+        totalSeats,
+        last7Days,
+        destinations,
+        totalSales: paid.reduce(
+          (sum, r) => sum + Number(r.total_cents || 0),
+          0,
+        ) / 100,
+        alerts,
+        fleet: {
+          total: departures.length,
+          onRoute: departures.filter((d) => d.status === "departed").length,
+          atTerminal: departures.filter((d) => d.status === "scheduled").length,
+        },
+        yesterday: {
+          sales:
+            paid
+              .filter(
+                (r) => inLima(r.paid_at) === limaDate(now - 86400000),
+              )
+              .reduce((sum, r) => sum + Number(r.total_cents || 0), 0) / 100,
+          reservations: this.db
+            .prepare(
+              "SELECT COUNT(*) AS count FROM reservations WHERE LEFT(created_at,10)=?")
+            .get(limaDate(now - 86400000)).count,
+        },
+      };
     });
   }
   routes() {
@@ -1167,4 +1507,48 @@ export class OperationsStore extends BookingStore {
       };
     });
   }
+  boardingLookup(documentNumber) {
+    const dni = String(documentNumber || "").trim().toUpperCase();
+    if (!dni || dni.length < 6 || dni.length > 40)
+      fail(400, "INVALID_DOCUMENT", "Ingresa un DNI/documento válido.");
+    return this.transaction((now) => {
+      const rows = this.db
+        .prepare(
+          "SELECT p.name,p.seat,p.document_type AS documentType,p.document_number AS documentNumber,r.code AS reservationCode,r.status AS reservationStatus,r.travel_date AS travelDate,r.departure_id AS departureId,t.origin,t.destination,d.departure_at AS departureAt,d.status AS departureStatus,tk.token,tk.checked_in_at AS checkedInAt FROM passengers p JOIN reservations r ON r.code=p.reservation_code JOIN trips t ON t.id=r.trip_id LEFT JOIN departures d ON d.id=r.departure_id LEFT JOIN tickets tk ON tk.passenger_id=p.id WHERE UPPER(p.document_number)=? AND r.status='paid' ORDER BY d.departure_at DESC,r.created_at DESC LIMIT 20",
+        )
+        .all(dni);
+      return rows.map((r) => {
+        const depAt = r.departureAt ? Date.parse(r.departureAt) : NaN;
+        const canBoard =
+          r.token &&
+          !r.checkedInAt &&
+          r.departureStatus === "scheduled" &&
+          Number.isFinite(depAt) &&
+          now >= depAt - 60 * 60000 &&
+          now < depAt;
+        return {
+          name: r.name,
+          seat: r.seat,
+          documentType: r.documentType,
+          documentNumber: r.documentNumber,
+          reservationCode: r.reservationCode,
+          route: r.origin + " → " + r.destination,
+          travelDate: r.travelDate,
+          departureAt: r.departureAt,
+          token: r.token,
+          qrReady: Boolean(r.token),
+          checkedInAt: r.checkedInAt,
+          canBoard,
+          status: r.checkedInAt
+            ? "boarded"
+            : !r.token
+              ? "no_qr"
+              : canBoard
+                ? "ready"
+                : "not_in_window",
+        };
+      });
+    });
+  }
+
 }

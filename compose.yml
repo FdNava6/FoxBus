@@ -1,4 +1,21 @@
 services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - backend/.env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-change-me-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
   backend:
     build:
       context: .
@@ -8,13 +25,17 @@ services:
       - backend/.env
     environment:
       NODE_ENV: production
-      DATABASE_PATH: /app/data/foxbus.sqlite
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
       DEMO_PAYMENTS: "false"
       DEV_MAILBOX: "false"
       SEED_DEMO_DATA: "false"
       TRUST_PROXY: "true"
     volumes:
-      - booking-data:/app/data
+      - backup-data:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
   frontend:
     build:
       context: .
@@ -25,4 +46,5 @@ services:
     depends_on:
       - backend
 volumes:
-  booking-data:
+  backup-data:
+  mysql-data:

@@ -14,6 +14,8 @@ export const reservationService = {
     (await api.delete(`/reservations/${code}`)).data,
   payDemo: async (code) =>
     (await api.post(`/reservations/${code}/pay-demo`)).data,
+  payWithMethod: async (code, data) =>
+    (await api.post(`/reservations/${code}/pay`, data)).data,
 };
 
 export const bookingErrorMessage = (error) =>

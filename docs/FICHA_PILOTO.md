@@ -20,7 +20,7 @@ Se usaron datos ficticios y contraseña exclusiva: sí / no.
 | --- | --- | --- | --- | --- |
 | Encontrar duración, llegada, terminales y total | ___ | ___ | ___ | ___ |
 | Elegir asiento y retomar tras recarga | ___ | ___ | ___ | ___ |
-| Entender 10 minutos / 2 horas y cancelar | ___ | ___ | ___ | ___ |
+| Entender 2 minutos / 3 minutos y cancelar | ___ | ___ | ___ | ___ |
 | Simular pago y guardar documento de prueba | ___ | ___ | ___ | ___ |
 | Recuperar o consultar desde otro dispositivo | ___ | ___ | ___ | ___ |
 | Registrar y seguir una solicitud de prueba | ___ | ___ | ___ | ___ |

@@ -106,10 +106,10 @@ export default function PilotGuide() {
               </li>
               <li>
                 Selecciona un asiento y completa datos ficticios. Recarga una
-                vez: el plazo original de 10 minutos no debe reiniciarse.
+                vez: el plazo original de 2 minutos no debe reiniciarse.
               </li>
               <li>
-                Confirma sin pagar y revisa el plazo de 2 horas. En Mis viajes
+                Confirma sin pagar y revisa el plazo de 3 minutos. En Mis viajes
                 puedes cancelar o usar “Simular pago”. Nunca envíes dinero.
               </li>
               <li>

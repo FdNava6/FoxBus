@@ -1,7 +1,4 @@
-import {
-  paymentActionLabel,
-  presentationMode,
-} from "../utils/presentationMode";
+import { presentationMode } from "../utils/presentationMode";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Button from "../components/common/Button";
@@ -82,6 +79,12 @@ export default function Checkout() {
     const warning = setTimeout(() => setDraftSaved(saved), 0);
     return () => clearTimeout(warning);
   }, [code, session, contact, travelers]);
+  useEffect(() => {
+    if (session?.status === "pending_payment")
+      document
+        .getElementById("pasarela-pago")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [session?.status]);
   const updateTraveler = (seat, key, value) =>
     setTravelers((prev) => ({
       ...prev,
@@ -189,16 +192,11 @@ export default function Checkout() {
           {session.status === "pending_payment" && (
             <>
               <PaymentDeadline reservation={session} onElapsed={refresh} />
-              <PaymentOptions reservation={session} />
+              <PaymentOptions
+                reservation={session}
+                onPaid={(updated) => setBookingSession(updated)}
+              />
               <div className="flex flex-wrap gap-3">
-                {session.payment_mode === "demo" && (
-                  <Button
-                    disabled={processing}
-                    onClick={() => action(reservationService.payDemo)}
-                  >
-                    {paymentActionLabel}
-                  </Button>
-                )}
                 <Button
                   variant="secondary"
                   disabled={processing}
@@ -220,7 +218,7 @@ export default function Checkout() {
           {session.status === "cancelled" && (
             <p role="status" className="text-red-700">
               {session.cancellation_reason === "payment_timeout"
-                ? "El plazo de 2 horas venció sin pago. Los asientos se liberaron."
+                ? "El plazo de 3 minutos venció sin pago. Los asientos se liberaron."
                 : "La reserva fue cancelada. Consulta el seguimiento si había un pago."}
             </p>
           )}
@@ -472,9 +470,7 @@ export default function Checkout() {
                 .
               </label>
               <Button fullWidth disabled={!ready || processing || !policy}>
-                {processing
-                  ? "Confirmando reserva..."
-                  : "Confirmar reserva sin pagar"}
+                {processing ? "Confirmando reserva..." : "Continuar al pago"}
               </Button>
             </form>
             <TripSummary
@@ -487,7 +483,7 @@ export default function Checkout() {
             >
               <ServiceDetails trip={session?.trip || trip} policy={policy} />
               <p className="text-sm">
-                Al confirmar tendrás 2 horas para registrar el pago o cancelar.
+                Al confirmar tendrás 3 minutos para registrar el pago o cancelar.
               </p>
             </TripSummary>
           </div>

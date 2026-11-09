@@ -9,9 +9,12 @@ const sharp = require(process.argv[2] || "sharp");
 const folder = fileURLToPath(
   new URL("../frontend/src/assets/", import.meta.url),
 );
-for (const name of ["BUS", "FOX"]) {
-  const source = resolve(folder, name + ".png"),
-    target = resolve(folder, name + ".webp");
+const sources = {
+  BUS: resolve(folder, "BUS.png"),
+  FOX: fileURLToPath(new URL("../frontend/public/favicon.png", import.meta.url)),
+};
+for (const [name, source] of Object.entries(sources)) {
+  const target = resolve(folder, name + ".webp");
   await sharp(source).webp({ lossless: true, effort: 6 }).toFile(target);
   const hash = async (path) =>
     createHash("sha256")

@@ -32,7 +32,7 @@ export default function TripSummary({
 }) {
   if (!trip) return null;
   return (
-    <aside className="h-fit space-y-3 rounded-2xl bg-white p-6">
+    <aside className="h-fit space-y-3 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-bold">Resumen de la ruta</h2>
       <p className="font-semibold">
         {trip.origin} → {trip.destination}
@@ -63,12 +63,15 @@ export default function TripSummary({
         </p>
       )}
       <p>
-        {passengerCount} viajero(s) · Asientos:{" "}
-        {seats.join(", ") || "por elegir"}
+        {passengerCount > 0 ? `${passengerCount} viajero(s)` : "Viajeros por elegir"}{" "}
+        · Asientos: {seats.join(", ") || "por elegir"}
       </p>
       <p>{formatCurrency(trip.price)} por persona</p>
       <p className="text-xl font-bold text-fox-pink">
-        Total: {formatCurrency(total ?? trip.price * passengerCount)}
+        Total:{" "}
+        {passengerCount > 0
+          ? formatCurrency(total ?? trip.price * passengerCount)
+          : "por calcular"}
       </p>
       {children}
     </aside>

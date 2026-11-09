@@ -78,8 +78,8 @@ frontend/
 Iniciar también el [backend](../backend/README.md). `VITE_API_URL` apunta por defecto a `http://localhost:8080/api`.
 
 - Duración estimada explícita en resultados y resúmenes.
-- Cuenta regresiva de 10 minutos durante selección de asientos y datos.
-- Reserva confirmada sin pago: aviso y límite de 2 horas para pagar o cancelar.
+- Cuenta regresiva de 2 minutos durante selección de asientos y datos.
+- Reserva confirmada sin pago: aviso y límite de 3 minutos para pagar o cancelar.
 - Los plazos y estados pertenecen al servidor; recargar no los reinicia.
 - Las reservas se guardan en SQLite y los asientos se liberan con el job, incluso con el navegador cerrado.
 - API no disponible: error visible; no se confirma una reserva ficticia.

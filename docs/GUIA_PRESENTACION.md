@@ -32,14 +32,14 @@ Mostrar el recorrido reserva → pago simulado → boleto de prueba → atenció
 
 1. Elegir Lima–Trujillo para un día posterior a la exposición, con venta todavía abierta.
 2. Mostrar duración, llegada, terminales y precio del grupo.
-3. Seleccionar un asiento y señalar el contador de 10 minutos.
+3. Seleccionar un asiento y señalar el contador de 2 minutos.
 4. Completar datos ficticios y confirmar sin pagar.
-5. Mostrar el plazo de 2 horas, con cancelación disponible.
+5. Mostrar el plazo de 3 minutos, con cancelación disponible.
 6. Pulsar “Confirmar pago” y mostrar el QR. Explicar oralmente que se registró una simulación, no un cobro. En el modo de exposición local los avisos visuales están ocultos.
 
-Frase: “Los estados y los asientos se guardan en SQLite. No estamos cobrando ni emitiendo un pasaje válido para viajar”.
+Frase: “Los estados y los asientos se guardan en MySQL. No estamos cobrando ni emitiendo un pasaje válido para viajar”.
 
-No esperar 10 minutos ni 2 horas durante la exposición, ni modificar el reloj del piloto. Las pruebas automáticas verifican esos límites en un reloj y una base aislados.
+No esperar 2 minutos ni 3 minutos durante la exposición, ni modificar el reloj del piloto. Las pruebas automáticas verifican esos límites en un reloj y una base aislados.
 
 ## 4. Demostración del operador
 
@@ -51,7 +51,7 @@ La gestión del personal permite cambiar acceso o revocar sesiones con un motivo
 
 ## 5. Viabilidad, mercado y cierre
 
-“Ya existe frontend React, backend Node 24 y base SQLite. Tenemos controles de acceso, expiración, inventario y pruebas. Seguimos en un piloto sin cobros: faltan proveedores reales, hosting si se comparte por internet y validación con un operador”.
+“Ya existe frontend React, backend Node 24 y base MySQL. Tenemos controles de acceso, expiración, inventario y pruebas. Seguimos en un piloto sin cobros: faltan proveedores reales, hosting si se comparte por internet y validación con un operador”.
 
 “Para justificar adopción necesitamos observar tareas de pasajeros y conocer las gestiones y costos del operador. La ficha de piloto está preparada, pero todavía no presentamos resultados de entrevistas ni demanda demostrada”.
 

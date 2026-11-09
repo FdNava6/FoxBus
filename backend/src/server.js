@@ -93,6 +93,7 @@ export function createApi({
   checkout = {},
   checkoutFetch = fetch,
   pilotMode = false,
+  twoFactorRequired = false,
 }) {
   bindDatabaseMode(
     store,
@@ -271,12 +272,29 @@ export function createApi({
         result = { user: newUser };
       } else if (method === "POST" && path === "/api/auth/login") {
         const data = await body();
-        const logged = auth.login(data.email, data.password);
-        auth.revoke(req.headers.cookie);
-        const token = auth.issue(logged);
-        auth.claimActive(guest, logged);
-        res.setHeader("Set-Cookie", cookie(token));
-        result = { user: logged };
+        if (twoFactorRequired) {
+          result = auth.startLogin(data.email, data.password);
+        } else {
+          const logged = auth.login(data.email, data.password);
+          auth.revoke(req.headers.cookie);
+          const token = auth.issue(logged);
+          auth.claimActive(guest, logged);
+          res.setHeader("Set-Cookie", cookie(token));
+          result = { user: logged };
+        }
+      } else if (
+        method === "POST" &&
+        path === "/api/auth/verify-2fa"
+      ) {
+        const data = await body(),
+          verified = auth.verifyLogin(
+            data.challenge,
+            data.code,
+            req.headers.cookie,
+          );
+        auth.claimActive(guest, verified.user);
+        res.setHeader("Set-Cookie", cookie(verified.token));
+        result = { user: verified.user };
       } else if (method === "POST" && path === "/api/auth/logout") {
         auth.revoke(req.headers.cookie);
         res.setHeader("Set-Cookie", cookie(""));
@@ -319,12 +337,18 @@ export function createApi({
         if (!devMailbox) fail(404, "NOT_FOUND", "Ruta no encontrada.");
         result = store.db
           .prepare(
-            "SELECT id,subject,body,status,last_error,created_at FROM outbox WHERE owner_hash=? ORDER BY created_at DESC LIMIT 30",
+            "SELECT id,subject,body,html,status,last_error,created_at FROM outbox WHERE owner_hash=? ORDER BY created_at DESC LIMIT 30",
           )
           .all(needOwner());
       } else if (path.startsWith("/api/staff")) {
         const actor = auth.require(user);
-        if (method === "GET" && path === "/api/staff/reservations") {
+        if (method === "GET" && path === "/api/staff/metrics") {
+          auth.require(user, ["admin", "finance", "agent"]);
+          result = store.metrics();
+        } else if (method === "GET" && path === "/api/staff/boarding-lookup") {
+          auth.require(user, ["admin", "boarding"]);
+          result = store.boardingLookup(params.documentNumber);
+        } else if (method === "GET" && path === "/api/staff/reservations") {
           auth.require(user, staff);
           result = store.staffReservations(url.search ? params : undefined);
         } else if (method === "GET" && path === "/api/staff/requests") {
@@ -413,7 +437,9 @@ export function createApi({
           result = store.departureInventory(path.split("/")[4]);
         } else if (method === "GET" && path === "/api/staff/departures") {
           auth.require(user, ["admin", "agent", "finance", "boarding"]);
-          result = store.departures();
+          result = store.departures({
+            passengerVisibleOnly: params.passengerVisible === "true",
+          });
         } else if (method === "POST" && path === "/api/staff/departures") {
           auth.require(user, ["admin"]);
           result = store.createDeparture(await body(), actor);
@@ -432,6 +458,13 @@ export function createApi({
           result = store.db
             .prepare(
               "SELECT id,name,email,role,active FROM users WHERE role!='passenger' ORDER BY name,id",
+            )
+            .all();
+        } else if (method === "GET" && path === "/api/staff/passenger-accounts") {
+          auth.require(user, ["admin", "agent", "finance"]);
+          result = store.db
+            .prepare(
+              "SELECT u.id,u.name,u.email,u.active,u.created_at,COUNT(DISTINCT CASE WHEN r.status='paid' THEN r.code END) AS paidReservations,COALESCE(SUM(CASE WHEN r.status='paid' THEN r.passenger_count ELSE 0 END),0) AS ticketsPurchased,COALESCE(SUM(CASE WHEN r.status='paid' THEN r.total_cents ELSE 0 END),0) AS totalCents,MAX(r.created_at) AS lastReservationAt FROM users u LEFT JOIN reservations r ON r.owner_hash=SHA2(CONCAT('account:',u.id),256) GROUP BY u.id,u.name,u.email,u.active,u.created_at ORDER BY u.created_at DESC,u.name",
             )
             .all();
         } else if (method === "POST" && path === "/api/staff/users") {
@@ -525,7 +558,7 @@ export function createApi({
           result = store.getMine(owner).map(decorate);
         else {
           const match =
-            /^\/api\/reservations\/([^/]+)(?:\/(seats|confirm|pay-demo|tickets|requests|payment-options|start-checkout))?$/.exec(
+            /^\/api\/reservations\/([^/]+)(?:\/(seats|confirm|pay|pay-demo|tickets|requests|payment-options|start-checkout))?$/.exec(
               path,
             );
           if (!match) fail(404, "NOT_FOUND", "Ruta no encontrada.");
@@ -581,6 +614,14 @@ export function createApi({
                 }),
               })),
             );
+          } else if (method === "POST" && action === "pay") {
+            if (!demoPayments)
+              fail(
+                403,
+                "DEMO_PAYMENTS_DISABLED",
+                "La pasarela de pago simulada está deshabilitada.",
+              );
+            result = decorate(store.payWithMethod(code, owner, await body()));
           } else if (method === "POST" && action === "pay-demo") {
             if (!demoPayments)
               fail(403, "DEMO_PAYMENTS_DISABLED", "Pago demo deshabilitado.");
@@ -613,8 +654,10 @@ export function createApi({
 }
 export function startServer(env = process.env) {
   const config = runtimeConfig(env);
-  const store = new OperationsStore(config.databasePath, {
+  const store = new OperationsStore(config.mysql.database, {
     publicUrl: env.PUBLIC_URL || "http://localhost:5173",
+    mysql: config.mysql,
+    env,
   });
   try {
     bindDatabaseMode(store, config.mode);

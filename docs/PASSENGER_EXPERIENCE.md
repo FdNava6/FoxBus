@@ -31,7 +31,7 @@ En Operador y políticas se publican identidad, contactos, horario, instruccione
 El grupo todavía debe conseguir un operador, contratar proveedores, comprobar terminales/servicios y validar las condiciones comerciales/legalmente aplicables. El sistema no verifica por sí solo que una empresa o una cuenta bancaria sean legítimas.
 
 ## Regla comercial conservada
-Se mantienen exactamente 10 minutos y 2 horas; por defecto, las nuevas reservas con pago diferido cierran 160 minutos antes de partir (130 + 30 de presentación). La búsqueda explica esta regla y ofrece otras fechas disponibles. No se habilitó una compra inmediata fuera de ese cierre: necesita un flujo y política distintos aprobados por el operador y el responsable del proyecto.
+Se mantienen exactamente 2 minutos y 3 minutos; por defecto, las nuevas reservas cierran 35 minutos antes de partir (5 + 30 de presentación). La búsqueda refleja esta regla. No se habilitó una compra inmediata fuera de ese cierre: necesita un flujo y política distintos aprobados por el operador y el responsable del proyecto.
 
 ## Verificación
 Pruebas de lógica/HTTP: acceso a checkout, importe y plazo inmutables, dominios permitidos, fallos, vencimiento durante respuesta, recuperación múltiple, SLA y estimación sin reintegro.

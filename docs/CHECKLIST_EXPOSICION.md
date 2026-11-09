@@ -23,7 +23,7 @@ Esta lista se completa en la laptop que se usará en clase. Todavía no se verif
 - [ ] Encender los dos procesos y mantener abiertas ambas terminales.
 - [ ] Cerrar pestañas con claves o información personal; usar solo datos ficticios.
 - [ ] Abrir la pantalla inicial y dejar preparado el acceso al personal, sin mostrar la contraseña.
-- [ ] Elegir una salida futura que no haya cerrado su venta; no retomar una sesión de selección que inició hace más de 10 minutos.
+- [ ] Elegir una salida futura que no haya cerrado su venta; no retomar una sesión de selección que inició hace más de 2 minutos.
 - [ ] Explicar que no hay cobros, correo externo ni pasajes válidos para viajar.
 
 ## Si algo falla

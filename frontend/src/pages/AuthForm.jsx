@@ -7,12 +7,57 @@ import { bookingErrorMessage } from "../services/reservationService";
 import Button from "../components/common/Button";
 import EnvironmentNotice from "../components/common/EnvironmentNotice";
 
+const PASSWORD_RULES = [
+  { id: "length", label: "Al menos 12 caracteres", test: (v) => v.length >= 12 },
+  { id: "upper", label: "Una letra mayúscula", test: (v) => /[A-Z]/.test(v) },
+  { id: "lower", label: "Una letra minúscula", test: (v) => /[a-z]/.test(v) },
+  { id: "number", label: "Un número", test: (v) => /\d/.test(v) },
+  {
+    id: "special",
+    label: "Un carácter especial",
+    test: (v) => /[^A-Za-z0-9]/.test(v),
+  },
+];
+
+const passwordIsValid = (value) =>
+  PASSWORD_RULES.every((rule) => rule.test(value));
+
+function PasswordChecklist({ password }) {
+  return (
+    <ul
+      aria-label="Requisitos de la contraseña"
+      aria-live="polite"
+      className="mt-2 space-y-1 text-xs"
+    >
+      {PASSWORD_RULES.map((rule) => {
+        const ok = rule.test(password);
+        return (
+          <li
+            key={rule.id}
+            className={
+              ok
+                ? "flex items-center gap-2 text-green-700"
+                : "flex items-center gap-2 text-gray-500"
+            }
+          >
+            <span aria-hidden="true">{ok ? "✓" : "○"}</span>
+            <span>{rule.label}</span>
+            <span className="sr-only">
+              {ok ? "cumplido" : "pendiente"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export default function AuthForm({ register = false }) {
   const navigate = useNavigate(),
     location = useLocation();
   const [form, setForm] = useState({
     name: "",
-    email: "",
+    email: location.state?.email || "",
     password: "",
     confirmPassword: "",
   });
@@ -20,7 +65,8 @@ export default function AuthForm({ register = false }) {
     [policy, setPolicy] = useState(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [showPassword, setShowPassword] = useState(false);
+    [showPassword, setShowPassword] = useState(false),
+    [loginFailed, setLoginFailed] = useState(false);
   useEffect(() => {
     operationsService
       .policy()
@@ -31,7 +77,10 @@ export default function AuthForm({ register = false }) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    setLoginFailed(false);
     try {
+      if (register && !passwordIsValid(form.password))
+        throw new Error("La contraseña no cumple todos los requisitos.");
       if (register && form.password !== form.confirmPassword)
         throw new Error("Las contraseñas no coinciden.");
       const data = register
@@ -49,7 +98,14 @@ export default function AuthForm({ register = false }) {
         { replace: true },
       );
     } catch (e) {
-      setError(e.response ? bookingErrorMessage(e) : e.message);
+      if (!register && e.response?.status === 401) {
+        setLoginFailed(true);
+        setError(
+          "Correo o contraseña incorrectos. Si todavía no tienes cuenta, créala para poder reservar.",
+        );
+      } else {
+        setError(e.response ? bookingErrorMessage(e) : e.message);
+      }
     } finally {
       setBusy(false);
     }
@@ -65,12 +121,22 @@ export default function AuthForm({ register = false }) {
           {register ? "Crea tu cuenta" : "Inicia sesión"}
         </h1>
         <p className="mb-5 text-sm text-gray-600">
-          Consulta tus reservas desde cualquier dispositivo. También puedes
-          reservar sin crear una cuenta.
+          {register
+            ? "Crea tu cuenta para comprar pasajes y consultar tus reservas desde cualquier dispositivo."
+            : "Ingresa con tu correo y contraseña para comprar pasajes y consultar tus reservas."}
         </p>
         {error && (
           <p role="alert" className="mb-4 text-red-700">
-            {error}
+            {error}{" "}
+            {loginFailed && (
+              <Link
+                to="/register"
+                state={{ email: form.email, from: location.state?.from }}
+                className="underline"
+              >
+                Crear cuenta
+              </Link>
+            )}
           </p>
         )}
         <form onSubmit={submit} className="space-y-4">
@@ -109,6 +175,9 @@ export default function AuthForm({ register = false }) {
                 required
                 onChange={(e) => setForm({ ...form, [name]: e.target.value })}
               />
+              {register && name === "password" && (
+                <PasswordChecklist password={form.password} />
+              )}
             </div>
           ))}
           <button
@@ -118,9 +187,6 @@ export default function AuthForm({ register = false }) {
           >
             {showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
           </button>
-          <p className="text-xs text-gray-500">
-            Contraseña: al menos 12 caracteres.
-          </p>
           {register && (
             <label className="flex items-start gap-2 text-sm">
               <input
@@ -140,7 +206,13 @@ export default function AuthForm({ register = false }) {
               .
             </label>
           )}
-          <Button fullWidth disabled={busy || (register && !policy)}>
+          <Button
+            fullWidth
+            disabled={
+              busy ||
+              (register && (!policy || !passwordIsValid(form.password)))
+            }
+          >
             {busy
               ? "Procesando..."
               : register
@@ -151,7 +223,7 @@ export default function AuthForm({ register = false }) {
         <p className="mt-5 text-sm">
           <Link
             to={register ? "/login" : "/register"}
-            state={location.state}
+            state={{ email: form.email, from: location.state?.from }}
             className="text-fox-pink underline"
           >
             {register ? "Ya tengo cuenta" : "Crear una cuenta"}
@@ -162,12 +234,6 @@ export default function AuthForm({ register = false }) {
           className="mt-3 block text-sm text-fox-pink underline"
         >
           Olvidé mi contraseña
-        </Link>
-        <Link
-          to="/resultados"
-          className="mt-4 block text-sm text-fox-pink underline"
-        >
-          Continuar sin cuenta y buscar viajes
         </Link>
       </section>
     </main>

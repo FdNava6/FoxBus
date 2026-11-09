@@ -1,7 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
-import { readFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { randomUUID, randomBytes } from "node:crypto";
+import QRCode from "qrcode";
+import svgTag from "qrcode/lib/renderer/svg-tag.js";
+import { MySqlDatabase } from "./mysql/database.js";
+import { mysqlSettings, resolveDatabaseTarget } from "./mysql/settings.js";
 import { POLICY_DEFAULTS } from "./passenger-experience.js";
 import {
   BookingError,
@@ -15,8 +17,8 @@ import {
   travelersData,
 } from "./domain.js";
 export { BookingError, ownerHash };
-export const SESSION_DURATION_MS = 10 * 60 * 1000;
-export const PAYMENT_DURATION_MS = 2 * 60 * 60 * 1000;
+export const SESSION_DURATION_MS = 2 * 60 * 1000;
+export const PAYMENT_DURATION_MS = 3 * 60 * 1000;
 export const ALL_SEATS = Array.from(
   { length: 40 },
   (_, i) => `${Math.floor(i / 4) + 1}${"ABCD"[i % 4]}`,
@@ -24,64 +26,75 @@ export const ALL_SEATS = Array.from(
 
 export class BookingStore {
   constructor(
-    path = ":memory:",
-    { clock = Date.now, publicUrl = "http://localhost:5173" } = {},
+    target = ":memory:",
+    {
+      clock = Date.now,
+      publicUrl = "http://localhost:5173",
+      mysql = {},
+      env = process.env,
+    } = {},
   ) {
-    if (path !== ":memory:")
-      mkdirSync(dirname(resolve(path)), { recursive: true });
-    this.db = new DatabaseSync(path);
+    const settings = { ...mysqlSettings(env), ...mysql },
+      resolved = resolveDatabaseTarget(target, settings.database);
+    this.databaseName = resolved.database;
+    this.ephemeralDatabase = resolved.ephemeral;
+    this.db = new MySqlDatabase({ ...settings, database: resolved.database });
     this.clock = clock;
     this.publicUrl = publicUrl;
     this.db.exec(
-      "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;",
+      "CREATE TABLE IF NOT EXISTS schema_migrations (version INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
     );
-    this.db.exec(
-      "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY) STRICT;",
+    const migrations = [
+      [1, "001_schema.sql"],
+      [2, "002_2fa_and_payment_method.sql"],
+      [3, "003_html_mail_and_ticket_limit.sql"],
+    ];
+    const applied = new Set(
+      this.db
+        .prepare("SELECT version FROM schema_migrations")
+        .all()
+        .map((row) => Number(row.version)),
     );
-    for (const [version, file] of [
-      [1, "001_booking_deadlines.sql"],
-      [2, "002_operations.sql"],
-      [3, "003_passenger_experience.sql"],
-      [4, "004_corridor_norte.sql"],
-      [5, "005_passenger_preferences.sql"],
-    ]) {
-      if (
-        this.db
-          .prepare("SELECT version FROM schema_migrations WHERE version=?")
-          .get(version)
-      )
-        continue;
-      this.db.exec("BEGIN IMMEDIATE");
-      try {
-        this.db.exec(
-          readFileSync(
-            new URL("../migrations/" + file, import.meta.url),
-            "utf8",
-          ),
-        );
-        this.db
-          .prepare("INSERT INTO schema_migrations VALUES (?)")
-          .run(version);
-        this.db.exec("COMMIT");
-      } catch (error) {
-        this.db.exec("ROLLBACK");
-        throw error;
-      }
+    for (const [version, file] of migrations) {
+      if (applied.has(version)) continue;
+      this.db.exec(
+        readFileSync(new URL("../migrations/mysql/" + file, import.meta.url), "utf8").replace(/^\uFEFF/, ""),
+      );
+      this.db
+        .prepare("INSERT IGNORE INTO schema_migrations(version) VALUES (?)")
+        .run(version);
     }
+    this.refreshPilotMode();
+  }
+  refreshPilotMode() {
     this.pilotMode =
       this.db
-        .prepare("SELECT value FROM operator_settings WHERE key='runtime_mode'")
+        .prepare(
+          "SELECT value FROM operator_settings WHERE `key`='runtime_mode'",
+        )
         .get()?.value === "pilot";
+    return this.pilotMode;
   }
   close() {
+    if (this.ephemeralDatabase) {
+      try {
+        this.db.dropDatabase();
+      } catch {
+        // La limpieza de una base temporal no debe ocultar el cierre.
+      }
+    }
     this.db.close();
+  }
+  integrity() {
+    this.db.prepare("SELECT 1 AS ok").get();
+    return "ok";
   }
   policy() {
     return {
       ...POLICY_DEFAULTS,
       ...JSON.parse(
         this.db
-          .prepare("SELECT value FROM operator_settings WHERE key='policy'")
+          .prepare("SELECT value FROM operator_settings WHERE `key`='policy'")
           .get().value,
       ),
     };
@@ -96,18 +109,18 @@ export class BookingStore {
   transaction(action) {
     // Una operación compuesta (ventanilla) tiene un único commit/rollback.
     if (this.db.isTransaction) return action(this.clock());
-    this.db.exec("BEGIN IMMEDIATE");
+    this.db.exec("START TRANSACTION");
     try {
       const now = this.clock();
       this.expireInsideTransaction(now);
       this.db.exec("SAVEPOINT operation");
       try {
         const result = action(now);
-        this.db.exec("RELEASE operation; COMMIT");
+        this.db.exec("RELEASE SAVEPOINT operation; COMMIT");
         return result;
       } catch (error) {
         if (error instanceof BookingError) {
-          this.db.exec("ROLLBACK TO operation; RELEASE operation; COMMIT");
+          this.db.exec("ROLLBACK TO operation; RELEASE SAVEPOINT operation; COMMIT");
         } else this.db.exec("ROLLBACK");
         throw error;
       }
@@ -116,18 +129,28 @@ export class BookingStore {
       throw error;
     }
   }
-  notify(row, subject, body) {
+  notify(row, subject, body, html = null) {
     const contact = JSON.parse(row.passenger_json || "null");
     if (!contact?.email) return;
-    this.queueMail(row.owner_hash, contact.email, subject, body, row.code);
+    this.queueMail(row.owner_hash, contact.email, subject, body, row.code, html);
   }
-  queueMail(owner, email, subject, body, code = null) {
+  queueMail(owner, email, subject, body, code = null, html = null) {
     const time = iso(this.clock());
     this.db
       .prepare(
-        "INSERT INTO outbox(id,owner_hash,reservation_code,recipient,subject,body,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO outbox(id,owner_hash,reservation_code,recipient,subject,body,html,next_attempt_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
       )
-      .run(randomUUID(), owner, code, email, subject, body, time, time);
+      .run(
+        randomUUID(),
+        owner,
+        code,
+        email,
+        subject,
+        body,
+        html || null,
+        time,
+        time,
+      );
   }
   expireInsideTransaction(now) {
     const time = iso(now);
@@ -174,7 +197,7 @@ export class BookingStore {
       .run(time);
     this.db
       .prepare(
-        "INSERT INTO job_health VALUES ('expiration',?,NULL) ON CONFLICT(name) DO UPDATE SET last_success_at=excluded.last_success_at,last_error=NULL",
+        "INSERT INTO job_health VALUES ('expiration',?,NULL) ON DUPLICATE KEY UPDATE last_success_at=VALUES(last_success_at),last_error=NULL",
       )
       .run(time);
     return { expiredSessions, cancelledUnpaid };
@@ -184,7 +207,7 @@ export class BookingStore {
   }
   // Permite obtener contadores del job sin aplicar la limpieza dos veces.
   runExpiration() {
-    this.db.exec("BEGIN IMMEDIATE");
+    this.db.exec("START TRANSACTION");
     try {
       const result = this.expireInsideTransaction(this.clock());
       this.db.exec("COMMIT");
@@ -194,7 +217,7 @@ export class BookingStore {
       throw error;
     }
   }
-  seedDemoSchedule(startDate = limaDate(this.clock()), days = 7) {
+  seedDemoSchedule(startDate = limaDate(this.clock()), days = 30) {
     validateDate(startDate);
     const seats = ALL_SEATS.map((id, i) => ({
       id,
@@ -205,9 +228,9 @@ export class BookingStore {
       blocked: false,
     }));
     this.db
-      .prepare("INSERT OR IGNORE INTO vehicles VALUES (?,?,?)")
+      .prepare("INSERT IGNORE INTO vehicles VALUES (?,?,?)")
       .run("demo-bus", "Bus de muestra · 40 asientos", JSON.stringify(seats));
-    this.db.prepare("INSERT OR IGNORE INTO vehicles VALUES (?,?,?)").run(
+    this.db.prepare("INSERT IGNORE INTO vehicles VALUES (?,?,?)").run(
       "demo-bus-2",
       "Bus de muestra · dos pisos",
       JSON.stringify(
@@ -223,12 +246,12 @@ export class BookingStore {
       for (const trip of this.db.prepare("SELECT * FROM trips").all()) {
         const vehicleId = "scheduled-demo-bus-" + trip.id;
         this.db
-          .prepare("INSERT OR IGNORE INTO vehicles VALUES (?,?,?)")
+          .prepare("INSERT IGNORE INTO vehicles VALUES (?,?,?)")
           .run(vehicleId, "Bus de muestra " + trip.id, JSON.stringify(seats));
         const departureAt = `${date}T${trip.departure_time}:00-05:00`;
         this.db
           .prepare(
-            "INSERT OR IGNORE INTO departures(id,trip_id,travel_date,vehicle_id,departure_at,arrival_at,terminal_origin,terminal_destination) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT IGNORE INTO departures(id,trip_id,travel_date,vehicle_id,departure_at,arrival_at,terminal_origin,terminal_destination) VALUES (?,?,?,?,?,?,?,?)",
           )
           .run(
             "demo-" + trip.id + "-" + date,
@@ -321,6 +344,20 @@ export class BookingStore {
         "SELECT COUNT(*) AS count FROM reservation_seats WHERE trip_id=? AND travel_date=?",
       )
       .get(row.id, date).count;
+    const drivers = [
+      "Carlos Mendoza",
+      "Luis Herrera",
+      "Jorge Salazar",
+      "Miguel Torres",
+      "Ricardo Flores",
+      "Pedro Castillo",
+    ];
+    const driverIndex =
+      Math.abs(
+        String(row.id)
+          .split("")
+          .reduce((a, c) => a + c.charCodeAt(0), 0),
+      ) % drivers.length;
     return {
       id: row.id,
       departureId: dep.id,
@@ -353,6 +390,10 @@ export class BookingStore {
       ),
       sales_closes_at: iso(this.salesClose(dep)),
       policyVersion: this.policy().version,
+      driver: {
+        name: drivers[driverIndex],
+        experienceYears: 4 + (driverIndex % 12),
+      },
     };
   }
   catalog() {
@@ -381,7 +422,7 @@ export class BookingStore {
       fail(400, "INVALID_PREFERENCE", "Elige un destino del corredor norte.");
     this.db
       .prepare(
-        "INSERT INTO passenger_preferences(owner_hash,schedule,service_type,destination,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(owner_hash) DO UPDATE SET schedule=excluded.schedule,service_type=excluded.service_type,destination=excluded.destination,updated_at=excluded.updated_at",
+        "INSERT INTO passenger_preferences(owner_hash,schedule,service_type,destination,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE schedule=VALUES(schedule),service_type=VALUES(service_type),destination=VALUES(destination),updated_at=VALUES(updated_at)",
       )
       .run(owner, schedule, serviceType, place, iso(this.clock()));
     return this.preferences(owner);
@@ -418,47 +459,56 @@ export class BookingStore {
       if (inWindow[preferences.schedule]?.(row.departureTime)) points += 1;
       return points;
     };
+    const matched = preferences ? trips.filter((t) => score(t) > 0) : [];
+    const fallback = preferences
+      ? trips.filter(
+          (t) =>
+            t.destination.toLowerCase() === preferences.destination.toLowerCase(),
+        )
+      : [];
+    const items = (matched.length ? matched : fallback.length ? fallback : [])
+      .sort(
+        (a, b) =>
+          score(b) - score(a) ||
+          a.date.localeCompare(b.date) ||
+          a.departureTime.localeCompare(b.departureTime),
+      )
+      .slice(0, 6)
+      .map((t) => ({
+        id: t.id,
+        origin: t.origin,
+        destination: t.destination,
+        date: t.date,
+        departureTime: t.departureTime,
+        durationMinutes: t.durationMinutes,
+        price: t.priceCents / 100,
+        service: t.service,
+      }));
     return {
       personalized: Boolean(preferences),
       preferences,
-      items: (preferences ? trips.filter((t) => score(t) > 0) : [])
-        .sort(
-          (a, b) =>
-            score(b) - score(a) ||
-            a.date.localeCompare(b.date) ||
-            a.departureTime.localeCompare(b.departureTime),
-        )
-        .slice(0, 6)
-        .map((t) => ({
-          id: t.id,
-          origin: t.origin,
-          destination: t.destination,
-          date: t.date,
-          departureTime: t.departureTime,
-          durationMinutes: t.durationMinutes,
-          price: t.priceCents / 100,
-          service: t.service,
-        })),
+      items,
     };
   }
   searchTrips({ origin, destination, date, passengers = 1 }) {
     validateDate(date);
     if (date < limaDate(this.clock()))
       fail(400, "PAST_DATE", "No se pueden comprar viajes de fechas pasadas.");
+    const maxSeats = this.policy().maxSeats || 5;
     if (
       !Number.isInteger(Number(passengers)) ||
       Number(passengers) < 1 ||
-      Number(passengers) > this.policy().maxSeats
+      Number(passengers) > maxSeats
     )
       fail(
         400,
         "INVALID_PASSENGERS",
-        "Reserva entre 1 y 6 pasajeros por operación.",
+        `Reserva entre 1 y ${maxSeats} pasajeros por operación.`,
       );
     return this.transaction((now) =>
       this.db
         .prepare(
-          "SELECT t.* FROM trips t JOIN departures d ON d.trip_id=t.id WHERE t.origin=? COLLATE NOCASE AND t.destination=? COLLATE NOCASE AND d.travel_date=? AND d.status='scheduled'",
+          "SELECT t.* FROM trips t JOIN departures d ON d.trip_id=t.id WHERE t.origin=? AND t.destination=? AND d.travel_date=? AND d.status='scheduled'",
         )
         .all(origin || "", destination || "", date)
         .filter((t) => now < this.salesClose(this.departure(t.id, date)))
@@ -511,6 +561,7 @@ export class BookingStore {
     return {
       code: row.code,
       status: row.status,
+      paymentMethod: row.payment_method || null,
       revision: row.revision,
       trip,
       route: `${trip.origin} → ${trip.destination}`,
@@ -558,12 +609,13 @@ export class BookingStore {
     validateDate(date);
     if (!/^[a-zA-Z0-9-]{16,80}$/.test(requestKey || ""))
       fail(400, "INVALID_REQUEST_KEY", "Falta el identificador de sesión.");
-    if (
-      !Number.isInteger(passengers) ||
-      passengers < 1 ||
-      passengers > this.policy().maxSeats
-    )
-      fail(400, "INVALID_PASSENGERS", "Selecciona entre 1 y 6 pasajeros.");
+    const maxSeats = this.policy().maxSeats || 5;
+    if (!Number.isInteger(passengers) || passengers < 1 || passengers > maxSeats)
+      fail(
+        400,
+        "INVALID_PASSENGERS",
+        `Selecciona entre 1 y ${maxSeats} pasajeros por compra.`,
+      );
     return this.transaction((now) => {
       this.tripRow(tripId);
       const dep = this.departure(tripId, date);
@@ -575,8 +627,7 @@ export class BookingStore {
       if (existing) {
         if (
           existing.trip_id !== Number(tripId) ||
-          existing.travel_date !== date ||
-          existing.passenger_count !== passengers
+          existing.travel_date !== date
         )
           fail(409, "REQUEST_KEY_REUSED", "La clave pertenece a otra reserva.");
         return this.view(existing, now);
@@ -628,14 +679,12 @@ export class BookingStore {
         valid = this.seatLayout(dep)
           .filter((s) => !s.blocked)
           .map((s) => s.id);
-      if (
-        seats.length > row.passenger_count ||
-        seats.some((s) => !valid.includes(s))
-      )
+      const maxSeats = this.policy().maxSeats || 5;
+      if (seats.length < 1 || seats.length > maxSeats || seats.some((s) => !valid.includes(s)))
         fail(
           400,
           "INVALID_SEATS",
-          "Selecciona asientos válidos, uno por pasajero.",
+          `Selecciona entre 1 y ${maxSeats} asientos válidos, uno por viajero.`,
         );
       const occupied = this.db
         .prepare(
@@ -657,10 +706,11 @@ export class BookingStore {
           .run(row.trip_id, row.travel_date, seat, code);
       this.db
         .prepare(
-          "UPDATE reservations SET selected_seats=?,total_cents=?,revision=revision+1 WHERE code=?",
+          "UPDATE reservations SET selected_seats=?,passenger_count=?,total_cents=?,revision=revision+1 WHERE code=?",
         )
         .run(
           JSON.stringify(seats),
+          Math.max(seats.length, 1),
           seats.length * this.tripRow(row.trip_id).price_cents,
           code,
         );
@@ -681,14 +731,16 @@ export class BookingStore {
         fail(
           409,
           "SALES_CLOSED",
-          "No quedan 2 horas antes del cierre de abordaje.",
+          "No quedan 3 minutos antes del cierre de abordaje.",
         );
       const seats = JSON.parse(row.selected_seats);
+      if (!seats.length)
+        fail(400, "SEATS_REQUIRED", "Selecciona al menos un asiento.");
       if (seats.length !== row.passenger_count)
         fail(
           400,
           "SEATS_REQUIRED",
-          "Selecciona exactamente un asiento por pasajero.",
+          "La selección de asientos no coincide con la reserva. Vuelve a elegirlos.",
         );
       const contact = contactData(data?.contact);
       const travelers = travelersData(data?.travelers, seats, row.travel_date);
@@ -791,10 +843,93 @@ export class BookingStore {
       .all(row.code)) {
       this.db
         .prepare(
-          "INSERT OR IGNORE INTO tickets(token,passenger_id,reservation_code,issued_at) VALUES (?,?,?,?)",
+          "INSERT IGNORE INTO tickets(token,passenger_id,reservation_code,issued_at) VALUES (?,?,?,?)",
         )
         .run(randomBytes(24).toString("hex"), p.id, row.code, iso(now));
     }
+    return this.ticketsForReservation(row.code);
+  }
+  ticketsForReservation(code) {
+    return this.db
+      .prepare(
+        "SELECT t.token,p.seat,p.name,p.document_type AS documentType,p.document_number AS documentNumber FROM tickets t JOIN passengers p ON p.id=t.passenger_id WHERE t.reservation_code=? ORDER BY p.seat",
+      )
+      .all(code);
+  }
+  paymentVoucher(row, tickets) {
+    const esc = (value) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const trip = this.tripView(this.tripRow(row.trip_id), row.travel_date);
+    const contact = JSON.parse(row.passenger_json || "null") || {};
+    const formatMoney = (cents) => "S/ " + (Number(cents || 0) / 100).toFixed(2);
+    const qrDataUri = (token) => {
+      const svg = svgTag.render(QRCode.create("FOXBUS:" + token), {
+        type: "svg",
+        margin: 1,
+      });
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    };
+    const items = tickets
+      .map(
+        (t) => `
+        <tr>
+          <td style="padding:12px;border:1px solid #e5e7eb;vertical-align:top">
+            <strong>${esc(t.name)}</strong><br/>
+            ${esc(t.documentType)} ${esc(t.documentNumber)}<br/>
+            Asiento <strong>${esc(t.seat)}</strong>
+          </td>
+          <td style="padding:12px;border:1px solid #e5e7eb;text-align:center;width:170px">
+            <img alt="Código QR del boleto ${esc(t.seat)}" width="140" height="140" style="display:block;margin:0 auto" src="${qrDataUri(t.token)}"/>
+            <div style="font-family:monospace;font-size:10px;word-break:break-all;margin-top:6px;color:#4b5563">FOXBUS:${esc(t.token)}</div>
+          </td>
+        </tr>`,
+      )
+      .join("");
+    const ticketsUrl =
+      this.publicUrl + "/boletos/" + encodeURIComponent(row.code);
+    const tripsUrl = this.publicUrl + "/mis-viajes";
+    const text =
+      `Comprobante de pago - FOXBUS\n` +
+      `Reserva: ${row.code}\n` +
+      `Ruta: ${trip.origin} → ${trip.destination}\n` +
+      `Fecha: ${row.travel_date} · Salida: ${trip.departureTime || ""}\n` +
+      `Comprador: ${contact.name || ""} (${contact.email || ""})\n` +
+      `Total: ${formatMoney(row.total_cents)}\n` +
+      `Pasajeros:\n` +
+      tickets
+        .map(
+          (t) =>
+            `- ${t.name} · ${t.documentType} ${t.documentNumber} · Asiento ${t.seat} · QR: FOXBUS:${t.token}`,
+        )
+        .join("\n") +
+      `\nBoletos: ${ticketsUrl}\nMis viajes: ${tripsUrl}`;
+    const html = `<!doctype html><html><body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;color:#111827">
+      <div style="max-width:680px;margin:0 auto;padding:24px">
+        <div style="background:#ffffff;border-radius:16px;padding:24px">
+          <h1 style="margin:0 0 8px;color:#e11d48">Comprobante de pago y boletos</h1>
+          <p style="margin:0 0 16px;color:#374151">Tu pago fue registrado. Presenta el código QR y tu documento al abordar.</p>
+          <table role="presentation" style="width:100%;border-collapse:collapse;margin-bottom:16px">
+            <tr><td style="padding:6px 0;color:#6b7280">Reserva</td><td style="padding:6px 0"><strong>${esc(row.code)}</strong></td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280">Ruta</td><td style="padding:6px 0">${esc(trip.origin)} → ${esc(trip.destination)}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280">Fecha / salida</td><td style="padding:6px 0">${esc(row.travel_date)} · ${esc(trip.departureTime || "")}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280">Comprador</td><td style="padding:6px 0">${esc(contact.name || "")}${contact.email ? " · " + esc(contact.email) : ""}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280">Total</td><td style="padding:6px 0"><strong>${esc(formatMoney(row.total_cents))}</strong></td></tr>
+          </table>
+          <h2 style="font-size:16px;margin:0 0 8px">Pasajeros y códigos QR</h2>
+          <table role="presentation" style="width:100%;border-collapse:collapse">${items}</table>
+          <p style="margin:16px 0 0">
+            <a href="${esc(ticketsUrl)}" style="display:inline-block;background:#e11d48;color:#ffffff;text-decoration:none;padding:12px 16px;border-radius:10px;font-weight:bold">Ver boletos</a>
+            <a href="${esc(tripsUrl)}" style="display:inline-block;margin-left:8px;color:#e11d48">Mis viajes</a>
+          </p>
+          <p style="margin:16px 0 0;font-size:12px;color:#6b7280">Cada QR admite validación de abordaje según las condiciones del servicio. Guarda este correo o tus boletos.</p>
+        </div>
+      </div>
+    </body></html>`;
+    return { text, html };
   }
   financialCase(row, reference, reason, status = "open") {
     const time = iso(this.clock()),
@@ -924,7 +1059,7 @@ export class BookingStore {
       else {
         for (const seat of JSON.parse(row.selected_seats))
           this.db
-            .prepare("INSERT OR IGNORE INTO reservation_seats VALUES (?,?,?,?)")
+            .prepare("INSERT IGNORE INTO reservation_seats VALUES (?,?,?,?)")
             .run(row.trip_id, row.travel_date, seat, code);
         this.db
           .prepare("INSERT INTO payments VALUES (?,?,?,?,?)")
@@ -940,12 +1075,25 @@ export class BookingStore {
             "UPDATE reservations SET status='paid',revision=revision+1,paid_at=?,cancelled_at=NULL,cancellation_reason=NULL WHERE code=?",
           )
           .run(iso(Date.parse(captured)), code);
-        this.issueTickets(row, now);
-        this.notify(
-          row,
-          "Pago registrado · boletos disponibles",
-          `Pago registrado para ${code}. Descarga tus boletos desde ${this.publicUrl}/mis-viajes. Presenta tu documento y boleto al abordar.`,
-        );
+        const paidRow = this.db
+          .prepare("SELECT * FROM reservations WHERE code=?")
+          .get(code);
+        const tickets = this.issueTickets(paidRow, now);
+        try {
+          const voucher = this.paymentVoucher(paidRow, tickets);
+          this.notify(
+            paidRow,
+            "Comprobante de pago y boletos · " + code,
+            voucher.text,
+            voucher.html,
+          );
+        } catch {
+          this.notify(
+            paidRow,
+            "Pago registrado · boletos disponibles",
+            `Pago registrado para ${code}. Descarga tus boletos desde ${this.publicUrl}/mis-viajes. Presenta tu documento y boleto al abordar.`,
+          );
+        }
       }
       this.audit(
         mode === "provider" ? "payment_provider" : owner || "counter",

@@ -10,6 +10,14 @@
       content="Prototipo académico FOXBus para la trazabilidad digital de pasajes interprovinciales."
     />
     <meta name="theme-color" content="#1A1A2E" />
+    <script>
+      try {
+        if (localStorage.getItem("foxbus_theme") === "dark")
+          document.documentElement.classList.add("dark");
+      } catch (error) {
+        void error;
+      }
+    </script>
     <title>FOXBus · Tu pasaje en un solo lugar</title>
   </head>
   <body>

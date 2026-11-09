@@ -1,16 +1,10 @@
-// ============================================
-// Preferences.jsx
-// Página /preferencias. El pasajero registrado define
-// su horario, tipo de servicio y ruta del corredor
-// norte. Estas preferencias se guardan en el servidor
-// y alimentan las "ofertas personalizadas" de la landing.
-// ============================================
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, Bus, MapPin, Sparkles, Check } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { userService } from "../services/userService";
 import { bookingErrorMessage } from "../services/reservationService";
+import { operationsService } from "../services/operationsService";
 import Button from "../components/common/Button";
 
 const schedules = [
@@ -23,7 +17,6 @@ const services = [
   { id: "ejecutivo", label: "Bus Ejecutivo" },
   { id: "cama", label: "Bus Cama" },
 ];
-const corridor = ["Trujillo", "Chiclayo", "Chimbote", "Piura", "Cajamarca"];
 
 function ChoiceGroup({ legend, icon, options, value, onChange }) {
   return (
@@ -65,10 +58,11 @@ export default function Preferences() {
   const user = useAuthStore((s) => s.user),
     isAuthenticated = useAuthStore((s) => s.isAuthenticated),
     checking = useAuthStore((s) => s.checking);
+  const [destinations, setDestinations] = useState([]);
   const [form, setForm] = useState({
     schedule: "morning",
     serviceType: "economico",
-    destination: corridor[0],
+    destination: "",
   });
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -76,20 +70,52 @@ export default function Preferences() {
     [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (checking || !isAuthenticated) return;
+    let active = true;
+    operationsService
+      .catalog()
+      .then((routes) => {
+        if (!active) return;
+        const fromLima = [...new Set((routes || []).map((r) => r.destination))];
+        setDestinations(fromLima);
+        setForm((f) => ({
+          ...f,
+          destination: f.destination || fromLima[0] || "",
+        }));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (checking) return;
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    let active = true;
     userService
       .getPreferences()
       .then((data) => {
-        const p = data.preferences;
-        if (p)
-          setForm({
+        const p = data?.preferences;
+        if (active && p)
+          setForm((f) => ({
+            ...f,
             schedule: p.schedule,
             serviceType: p.serviceType,
             destination: p.destination,
-          });
+          }));
       })
-      .catch((e) => setError(bookingErrorMessage(e)))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (active) setError(bookingErrorMessage(e));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [checking, isAuthenticated]);
 
   const change = (key, value) => setForm({ ...form, [key]: value });
@@ -102,7 +128,7 @@ export default function Preferences() {
     try {
       await userService.savePreferences(form);
       setNotice(
-        "Preferencias guardadas. Verás ofertas personalizadas en la portada.",
+        "Preferencias guardadas. Verás tus destinos personalizados en la portada.",
       );
     } catch (err) {
       setError(bookingErrorMessage(err));
@@ -124,15 +150,15 @@ export default function Preferences() {
         <section className="mx-auto max-w-2xl space-y-4 rounded-2xl bg-white p-6">
           <h1 className="text-2xl font-bold">Preferencias de viaje</h1>
           <p className="text-gray-600">
-            Registra tu cuenta para guardar tu horario, tipo de servicio y ruta
-            preferida, y recibe ofertas personalizadas.
+            Inicia sesión para guardar tu horario, tipo de servicio y destino, y
+            ver ofertas personalizadas en la portada.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link to="/register">
-              <Button>Crear cuenta</Button>
-            </Link>
             <Link to="/login">
-              <Button variant="secondary">Iniciar sesión</Button>
+              <Button>Iniciar sesión</Button>
+            </Link>
+            <Link to="/register">
+              <Button variant="secondary">Crear cuenta</Button>
             </Link>
           </div>
         </section>
@@ -155,8 +181,8 @@ export default function Preferences() {
         <header className="space-y-1">
           <h1 className="text-2xl font-bold">Tus preferencias de viaje</h1>
           <p className="text-gray-600">
-            Hola {user?.name}. Personaliza tus viajes por el corredor norte y
-            te mostraremos las mejores coincidencias.
+            Hola {user?.name}. Elige horario, servicio y destino: se usarán para
+            mostrarte ofertas personalizadas en la portada.
           </p>
         </header>
         {error && (
@@ -183,35 +209,36 @@ export default function Preferences() {
           value={form.serviceType}
           onChange={(v) => change("serviceType", v)}
         />
-        <fieldset>
-          <legend className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
+        <div>
+          <label
+            htmlFor="pref-destination"
+            className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
+          >
             <MapPin className="h-4 w-4 text-fox-pink" />
-            Tipo de ruta (Lima – destino)
-          </legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {corridor.map((c) => {
-              const active = form.destination === c;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => change("destination", c)}
-                  className={
-                    "rounded-xl border-2 p-3 text-left font-semibold transition " +
-                    (active
-                      ? "border-fox-pink bg-fox-pink/5 text-gray-800"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-fox-pink/40")
-                  }
-                >
-                  Lima – {c}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
+            Destino preferido (Lima – destino)
+          </label>
+          <select
+            id="pref-destination"
+            className="input"
+            required
+            value={form.destination}
+            onChange={(e) => change("destination", e.target.value)}
+          >
+            <option value="">Selecciona un destino</option>
+            {destinations.map((c) => (
+              <option key={c} value={c}>
+                Lima – {c}
+              </option>
+            ))}
+          </select>
+          {!destinations.length && (
+            <p className="mt-2 text-sm text-gray-600">
+              No hay destinos publicados aún.
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button disabled={busy}>
+          <Button disabled={busy || !form.destination}>
             {busy ? "Guardando…" : "Guardar preferencias"}
           </Button>
           <Link

@@ -1,10 +1,15 @@
 import { fail } from "./domain.js";
 export const POLICY_DEFAULTS = {
+  maxSeats: 5,
+  maxActiveReservations: 3,
+  boardingMinutes: 30,
   supportHours: "",
   paymentInstructions: "",
   changePolicy: "",
   refundPolicy: "",
   serviceResponseHours: null,
+  companyInfo: "",
+  faqs: [],
 };
 export function operatorReady(policy) {
   return Boolean(
@@ -129,7 +134,7 @@ export async function hostedCheckout(
     return { checkoutUrl: current.checkout_url };
   store.db
     .prepare(
-      "INSERT INTO payment_checkouts VALUES (?,?,?,?) ON CONFLICT(reservation_code) DO UPDATE SET checkout_url=excluded.checkout_url,expires_at=excluded.expires_at",
+      "INSERT INTO payment_checkouts VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE checkout_url=VALUES(checkout_url),expires_at=VALUES(expires_at)",
     )
     .run(
       code,

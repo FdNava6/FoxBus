@@ -16,11 +16,16 @@ export default function useBookingSession({ start = false } = {}) {
   const [error, setError] = useState("");
   const [initialized, setInitialized] = useState(false);
   const leaving = useRef(false);
+  const passengerCount = useRef(trip?.passengerCount || 1);
   const code = bookingSession?.code;
   const remaining = useCountdown(
     bookingSession?.session_expires_at,
     bookingSession?.server_now,
   );
+  useEffect(() => {
+    passengerCount.current =
+      bookingSession?.passengerCount || trip?.passengerCount || 1;
+  }, [bookingSession?.passengerCount, trip?.passengerCount]);
   const expire = useCallback(() => {
     leaving.current = true;
     if (code) clearDraft(code);
@@ -31,9 +36,9 @@ export default function useBookingSession({ start = false } = {}) {
         origin: trip?.origin,
         destination: trip?.destination,
         date: trip?.date,
-        passengers: 1,
+        passengers: passengerCount.current,
         notice:
-          "La sesión de 10 minutos terminó. Tus asientos se liberaron; selecciona nuevamente un viaje.",
+          "La sesión de 2 minutos terminó. Tus asientos se liberaron; selecciona nuevamente un viaje.",
       },
     });
   }, [clearCart, navigate, trip, code]);

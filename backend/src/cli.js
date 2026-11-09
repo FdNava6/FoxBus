@@ -1,21 +1,26 @@
-import { DatabaseSync, backup } from "node:sqlite";
 import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
-import { resolve, dirname, join } from "node:path";
+import { resolve, join } from "node:path";
 import { OperationsStore } from "./operations-store.js";
 import { AuthStore } from "./auth.js";
 import { operatorReady, checkoutConfigured } from "./passenger-experience.js";
-import { encryptBackup } from "./backup-crypto.js";
+import { encryptBackup, decryptBackup } from "./backup-crypto.js";
 import { randomUUID } from "node:crypto";
 import {
   runtimeConfig,
   bindDatabaseMode,
   pilotReport,
 } from "./runtime-config.js";
+import {
+  dumpDatabase,
+  serializeDump,
+  parseDump,
+  restoreDatabase,
+} from "./backup-dump.js";
 const command = process.argv[2],
-  config = runtimeConfig(),
-  path = config.databasePath;
-const store = new OperationsStore(path, {
+  config = runtimeConfig();
+const store = new OperationsStore(config.mysql.database, {
   publicUrl: process.env.PUBLIC_URL || "http://localhost:5173",
+  mysql: config.mysql,
 });
 try {
   bindDatabaseMode(store, config.mode);
@@ -51,11 +56,8 @@ try {
       throw new Error(
         "BACKUP_ENCRYPTION_KEY requiere 32 bytes en hexadecimal.",
       );
-    const folder = resolve(
-      process.env.BACKUP_DIR || join(dirname(path), "backups"),
-    );
+    const folder = resolve(process.env.BACKUP_DIR || "./data/backups");
     if (
-      folder === dirname(path) ||
       folder === resolve("/") ||
       folder === resolve(process.env.USERPROFILE || "/")
     )
@@ -67,35 +69,44 @@ try {
         new Date().toISOString().replace(/[:.]/g, "-") +
         "-" +
         randomUUID() +
-        ".sqlite",
+        ".dump.json",
     );
+    const bytes = serializeDump(
+      dumpDatabase(store.db, { database: config.mysql.database }),
+    );
+    parseDump(bytes);
     try {
-      await backup(store.db, target);
-      const check = new DatabaseSync(target);
-      let result;
-      try {
-        // Normalizar exclusivamente el snapshot: copia autónoma sin WAL/SHM.
-        check.exec("PRAGMA journal_mode=DELETE");
-        result = check.prepare("PRAGMA integrity_check").get();
-      } finally {
-        check.close();
-      }
-      if (Object.values(result)[0] !== "ok")
-        throw new Error("La copia no pasó integrity_check.");
+      writeFileSync(target, bytes, { flag: "wx", mode: 0o600 });
       if (encryptionKey) {
-        writeFileSync(
-          target + ".enc",
-          encryptBackup(readFileSync(target), encryptionKey),
-          { flag: "wx", mode: 0o600 },
-        );
+        writeFileSync(target + ".enc", encryptBackup(bytes, encryptionKey), {
+          flag: "wx",
+          mode: 0o600,
+        });
         console.log("Copia cifrada y verificada: " + target + ".enc");
-      } else
-        console.log("Copia verificada de desarrollo (sin cifrar): " + target);
+      } else console.log("Copia verificada de desarrollo (sin cifrar): " + target);
     } finally {
-      // Solo esta copia temporal recién creada; nunca la base activa.
-      if (encryptionKey)
-        for (const suffix of ["", "-wal", "-shm", "-journal"])
-          rmSync(target + suffix, { force: true });
+      if (encryptionKey) rmSync(target, { force: true });
+    }
+  } else if (command === "restore") {
+    const file = process.argv[3];
+    if (!file) throw new Error("Indica el archivo de copia a restaurar.");
+    const encryptionKey = process.env.BACKUP_ENCRYPTION_KEY,
+      raw = readFileSync(file),
+      bytes = file.endsWith(".enc")
+        ? decryptBackup(raw, encryptionKey)
+        : raw,
+      target =
+        process.env.MYSQL_DATABASE_RESTORE ||
+        config.mysql.database + "_restore";
+    const targetStore = new OperationsStore(target, {
+      publicUrl: process.env.PUBLIC_URL || "http://localhost:5173",
+      mysql: config.mysql,
+    });
+    try {
+      const count = restoreDatabase(parseDump(bytes), targetStore.db);
+      console.log("Restauración verificada en " + target + ": " + count + " tablas.");
+    } finally {
+      targetStore.close();
     }
   } else if (command === "doctor") {
     const policy = store.policy(),
@@ -105,6 +116,7 @@ try {
         {
           operatorConfigured: operatorReady(policy),
           appMode: config.mode,
+          database: config.mysql.database,
           realPaymentsAllowed: !config.pilotMode && !config.demoPayments,
           externalMailAllowed: !config.pilotMode,
           hostedCheckoutConfigured: checkoutConfigured({
@@ -125,7 +137,7 @@ try {
             .filter(([, enabled]) => enabled)
             .map(([flag]) => flag),
           jobs,
-          integrity: store.db.prepare("PRAGMA integrity_check").get(),
+          integrity: store.integrity(),
         },
         null,
         2,
@@ -158,7 +170,7 @@ try {
     );
   } else
     throw new Error(
-      "Comandos: admin, backup, doctor, pilot-report, retention-report.",
+      "Comandos: admin, backup, restore, doctor, pilot-report, retention-report.",
     );
 } finally {
   store.close();

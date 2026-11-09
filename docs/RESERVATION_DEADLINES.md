@@ -4,10 +4,10 @@
 
 | Evento | Resultado |
 | --- | --- |
-| Entrar en selección | Sesión persistente de 10 minutos |
+| Entrar en selección | Sesión persistente de 2 minutos |
 | Seleccionar | Retención atómica en el inventario compartido |
 | Recargar o reintentar | Mantiene código y vencimiento |
-| Confirmar con viajeros completos | Reserva pendiente de pago durante 2 horas |
+| Confirmar con viajeros completos | Reserva pendiente de pago durante 3 minutos |
 | Vencer selección | Sesión expirada y asientos liberados |
 | Vencer pago | Reserva cancelada, inventario libre e historial conservado |
 | Registrar pago validado | Reserva pagada y boleto QR por viajero |
@@ -15,7 +15,7 @@
 | Aprobar devolución | Cancelación/liberación y dinero pendiente de reintegro |
 | Verificar reintegro | Comprobante y cierre del caso financiero |
 
-Los límites son exclusivos: a ahora >= vencimiento no se admite confirmar ni iniciar un pago demo. Se conservan exactamente 10 minutos y 2 horas. Una salida deja de aceptar nuevas reservas 130 minutos más el margen de presentación antes de partir, para que ningún plazo termine después del abordaje.
+Los límites son exclusivos: a ahora >= vencimiento no se admite confirmar ni iniciar un pago demo. Se conservan exactamente 2 minutos y 3 minutos. Una salida deja de aceptar nuevas reservas 5 minutos más el margen de presentación antes de partir, para que ningún plazo termine después del abordaje.
 
 Los timestamps del servidor son UTC. La UI muestra fechas en hora de Perú y calcula cuentas regresivas desde el tiempo del servidor; el reloj local no determina disponibilidad. El job corre cada segundo, se recupera al reiniciar y la API limpia vencimientos en cada operación.
 
@@ -34,7 +34,7 @@ Cada asiento exige un viajero; máximo 6 por reserva y 3 reservas activas por id
 - Backend: npm ci, npm test, npm run load:check.
 - Frontend: npm ci, npm run lint, npm test, npm run build.
 - Instalar Chromium con Playwright y ejecutar npm run test:e2e.
-- El E2E usa API y SQLite aislados, con reloj adelantable y plazos sin modificar. Verifica ambos vencimientos, recargas, QR, móviles, panel, recuperación y cuentas en dos dispositivos.
+- El E2E usa API y MySQL aislados, con reloj adelantable y plazos sin modificar. Verifica ambos vencimientos, recargas, QR, móviles, panel, recuperación y cuentas en dos dispositivos.
 - Capturas: frontend/test-results/reservation-flow (no se versionan; CI las publica como artefacto).
 
 Se actualizaron Tailwind y dependencias; la auditoría npm quedó sin avisos en frontend/backend al preparar esta versión. Revisar periódicamente y realizar una evaluación independiente antes de un despliegue comercial.

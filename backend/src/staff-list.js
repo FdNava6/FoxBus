@@ -14,12 +14,13 @@ export function staffList(db, kind, params, present = (row) => row) {
         "cancelled",
         "expired",
       ],
+      defaultStatus: "paid",
       date: "r.travel_date",
       search: [
         "r.code",
-        "json_extract(r.passenger_json,'$.name')",
-        "json_extract(r.passenger_json,'$.email')",
-        "t.origin || ' ' || t.destination",
+        "JSON_UNQUOTE(JSON_EXTRACT(r.passenger_json,'$.name'))",
+        "JSON_UNQUOTE(JSON_EXTRACT(r.passenger_json,'$.email'))",
+        "CONCAT(t.origin,' ',t.destination)",
       ],
       order: "r.created_at DESC,r.code DESC",
     },
@@ -34,8 +35,8 @@ export function staffList(db, kind, params, present = (row) => row) {
         "s.id",
         "s.reservation_code",
         "s.message",
-        "json_extract(r.passenger_json,'$.name')",
-        "t.origin || ' ' || t.destination",
+        "JSON_UNQUOTE(JSON_EXTRACT(r.passenger_json,'$.name'))",
+        "CONCAT(t.origin,' ',t.destination)",
       ],
       order: "s.created_at DESC,s.id DESC",
     },
@@ -51,9 +52,9 @@ export function staffList(db, kind, params, present = (row) => row) {
         "f.reservation_code",
         "f.payment_reference",
         "f.refund_reference",
-        "json_extract(r.passenger_json,'$.name')",
-        "json_extract(r.passenger_json,'$.email')",
-        "t.origin || ' ' || t.destination",
+        "JSON_UNQUOTE(JSON_EXTRACT(r.passenger_json,'$.name'))",
+        "JSON_UNQUOTE(JSON_EXTRACT(r.passenger_json,'$.email'))",
+        "CONCAT(t.origin,' ',t.destination)",
       ],
       order: "f.created_at DESC,f.id DESC",
     },
@@ -74,11 +75,16 @@ export function staffList(db, kind, params, present = (row) => row) {
   const pageSize = number(params.pageSize, 25, 100),
     where = [],
     values = [];
-  if (params.status) {
-    if (!spec.states.includes(params.status))
-      fail(400, "INVALID_STATUS", "Estado de filtro inválido.");
-    where.push(spec.status + "=?");
-    values.push(params.status);
+  if (params.status === "all" && spec.defaultStatus) {
+    // sin filtro de estado
+  } else {
+    const status = params.status || spec.defaultStatus;
+    if (status) {
+      if (!spec.states.includes(status))
+        fail(400, "INVALID_STATUS", "Estado de filtro invǭlido.");
+      where.push(spec.status + "=?");
+      values.push(status);
+    }
   }
   for (const [name, operator] of [
     ["from", ">="],
@@ -102,16 +108,29 @@ export function staffList(db, kind, params, present = (row) => row) {
     where.push("r.channel=?");
     values.push(params.channel);
   }
+  if (params.kind) {
+    const kinds = [
+      "reprogram",
+      "refund",
+      "delay",
+      "complaint",
+      "privacy",
+    ];
+    if (kind !== "requests" || !kinds.includes(params.kind))
+      fail(400, "INVALID_KIND", "Tipo de solicitud inválido.");
+    where.push("s.kind=?");
+    values.push(params.kind);
+  }
   const search = String(params.search || "").trim();
   if (search.length > 120)
     fail(400, "SEARCH_TOO_LONG", "Usa una búsqueda de hasta 120 caracteres.");
   if (search) {
     const escaped =
-      "%" + search.replace(/[\\%_]/g, (value) => "\\" + value) + "%";
+      "%" + search.replace(/[!%_]/g, (value) => "!" + value) + "%";
     where.push(
       "(" +
         spec.search
-          .map((column) => column + " LIKE ? ESCAPE '\\'")
+          .map((column) => column + " LIKE ? ESCAPE '!'")
           .join(" OR ") +
         ")",
     );

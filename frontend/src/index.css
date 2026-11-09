@@ -100,3 +100,138 @@
     @apply bg-white rounded-2xl shadow-sm;
   }
 }
+
+/* Tema oscuro: el pasajero puede alternarlo desde la barra superior.
+   Las reglas van sin @layer para ganar a las utilidades de Tailwind. */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #0b0b12;
+  color: #e5e7eb;
+}
+
+.dark .bg-white {
+  background-color: #12121c;
+}
+
+.dark dialog {
+  background-color: #12121c;
+  color: #e5e7eb;
+}
+
+.dark .bg-gray-50 {
+  background-color: #161622;
+}
+
+.dark .bg-gray-100 {
+  background-color: #1e1e2d;
+}
+
+.dark .bg-gray-200 {
+  background-color: #2a2a3d;
+}
+
+.dark .bg-gray-300 {
+  background-color: #35354b;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: #f3f4f6;
+}
+
+.dark .text-gray-700 {
+  color: #e5e7eb;
+}
+
+.dark .text-gray-600 {
+  color: #cbd5e1;
+}
+
+.dark .text-gray-500 {
+  color: #a5adbf;
+}
+
+.dark .text-gray-400 {
+  color: #8b93a7;
+}
+
+.dark .border-gray-100 {
+  border-color: #23233a;
+}
+
+.dark .border-gray-200 {
+  border-color: #2c2c44;
+}
+
+.dark .border-gray-300 {
+  border-color: #3a3a55;
+}
+
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #23233a;
+}
+
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2c2c44;
+}
+
+.dark .input {
+  background-color: #12121c;
+  border-color: #2c2c44;
+  color: #f3f4f6;
+}
+
+.dark .input::placeholder {
+  color: #8b93a7;
+}
+
+.dark .card {
+  background-color: #12121c;
+}
+
+.dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.14);
+}
+
+.dark .bg-green-50 {
+  background-color: rgba(34, 197, 94, 0.14);
+}
+
+.dark .bg-yellow-50 {
+  background-color: rgba(234, 179, 8, 0.14);
+}
+
+.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.14);
+}
+
+.dark .text-red-700 {
+  color: #fca5a5;
+}
+
+.dark .text-green-700 {
+  color: #86efac;
+}
+
+.dark .text-yellow-700 {
+  color: #fde047;
+}
+
+.dark .text-blue-700 {
+  color: #93c5fd;
+}
+
+@media print {
+  .dark body {
+    background: #fff;
+    color: #000;
+  }
+
+  .dark .bg-white,
+  .dark .card {
+    background: #fff !important;
+  }
+}
